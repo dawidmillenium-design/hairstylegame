@@ -1,5 +1,6 @@
 import { useEffect, useRef, useState } from 'react';
 import './arcade.css';
+import './cutscene.css';
 import { STAGES, STAGE_FRAMES, getStageIndex } from './stages';
 import { HERO_BODY_URL, HERO_PORTRAIT_URL } from './assets/hero';
 import { GORILLA_URL, MERHUJUS_URL, MRPING_URL } from './assets/extra';

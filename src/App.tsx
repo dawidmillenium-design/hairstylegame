@@ -7,6 +7,8 @@ import { GORILLA_URL, MERHUJUS_URL, MRPING_URL } from './assets/extra';
 import { TRUCKER_PIXEL_URL } from './assets/truckerPixel';
 import { GAME_ART_ATLAS, STAGE_ART, GAME_ART } from './assets/gameArt';
 import ShadowRoutes from './ShadowRoutes';
+import ArcadeChrome from './ArcadeChrome';
+import { drawCinematicPort } from './cinematicPort';
 
 type GameNotice = { kind: 'call' | 'truckstop'; title: string; message: string; detail?: string };
 const TRUCKER_GREETING = 'Hello Blackhujus. Good luck with black truck tires. I wait for you in secret ocean containers.';
@@ -28,7 +30,7 @@ const DJ_SHOUTS = [
 
 export default function App() {
   const canvasRef = useRef<HTMLCanvasElement>(null);
-  const engineRef = useRef<{ start: () => void; jump: () => void; dismissNotice: () => void; tradeTires: () => boolean } | null>(null);
+  const engineRef = useRef<{ start: () => void; jump: () => void; dash: () => void; dismissNotice: () => void; tradeTires: () => boolean } | null>(null);
   const [gameStatus, setGameStatus] = useState<'menu' | 'playing' | 'paused' | 'over'>('menu');
   const [score, setScore] = useState(0);
   const [highScore, setHighScore] = useState(0);
@@ -40,6 +42,7 @@ export default function App() {
   const [notice, setNotice] = useState<GameNotice | null>(null);
   const noticeRef = useRef<GameNotice | null>(null);
   const [goldBars, setGoldBars] = useState(0);
+  const [boostReady, setBoostReady] = useState(true);
   const [rpgOpen, setRpgOpen] = useState(false);
   const rpgOpenRef = useRef(false);
   const rpgWasPlaying = useRef(false);
@@ -90,7 +93,8 @@ export default function App() {
       const container = canvas.parentElement;
       if (container) {
         // Internal backing store follows device pixel ratio, capped for GPU/memory safety.
-        const dpr = Math.max(1, Math.min(2, window.devicePixelRatio || 1));
+        const w = Math.max(320, Math.min(1280, container.clientWidth));
+        const dpr = Math.max(1, Math.min(3, (window.devicePixelRatio || 1) * (w / 800)));
         const physicalW = Math.round(800 * dpr);
         const physicalH = Math.round(450 * dpr);
         if (canvas.width !== physicalW || canvas.height !== physicalH) {
@@ -98,7 +102,6 @@ export default function App() {
           canvas.height = physicalH;
         }
         ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
-        const w = Math.max(1, Math.min(800, container.clientWidth - 20));
         const ratio = 800 / 450;
         canvas.style.width = w + 'px';
         canvas.style.height = (w / ratio) + 'px';
@@ -368,6 +371,9 @@ export default function App() {
       mer: { x: number };
       distanceTraveled: number;
       maxCombo: number;
+      jumpsRemaining: number;
+      dashTimer: number;
+      dashCooldown: number;
     }
 
     const CAB_COLORS = ['#e74c3c', '#3498db', '#f39c12', '#9b59b6', '#2ecc71'];
@@ -410,7 +416,10 @@ export default function App() {
       ping: { x: W + 300 },
       mer: { x: W * 0.55 },
       distanceTraveled: 0,
-      maxCombo: 0
+      maxCombo: 0,
+      jumpsRemaining: 2,
+      dashTimer: 0,
+      dashCooldown: 0
     });
 
     let state = initState();
@@ -518,6 +527,7 @@ export default function App() {
       }
       const isBonus = secretRef.current;
       setGoldBars(0);
+      setBoostReady(true);
       setNotice(null);
       noticeRef.current = null;
       if (secretRef.current) state.frame = 9 * STAGE_FRAMES;
@@ -542,13 +552,25 @@ export default function App() {
 
     // Input handling
     const handleJump = () => {
-      if (statusRef.current !== 'playing' || noticeRef.current) return;
-      if (!state.player.jump) {
-        state.player.vy = state.wingActive ? JUMP_FORCE * 1.35 : JUMP_FORCE;
-        state.player.jump = true;
-        playSound('jump');
-        addParticles(state.player.x + state.player.w / 2, GROUND, '#c8b88a', 5, 4);
-      }
+      if (statusRef.current !== 'playing' || noticeRef.current || rpgOpenRef.current) return;
+      if (state.jumpsRemaining <= 0) return;
+      const doubleJump = state.jumpsRemaining === 1;
+      state.player.vy = (state.wingActive ? JUMP_FORCE * 1.24 : JUMP_FORCE) * (doubleJump ? 0.84 : 1);
+      state.player.jump = true;
+      state.jumpsRemaining--;
+      playSound('jump');
+      addPopup(state.player.x + 55, state.player.y, doubleJump ? 'DOUBLE JUMP!' : 'BOING!', doubleJump ? '#ff70f4' : '#b6ff70');
+      addParticles(state.player.x + state.player.w / 2, state.player.y + state.player.h, doubleJump ? '#ff66fa' : '#ffd069', 15, 8);
+    };
+    const handleDash = () => {
+      if (statusRef.current !== 'playing' || noticeRef.current || rpgOpenRef.current || state.dashCooldown > 0) return;
+      state.dashTimer = 26;
+      state.dashCooldown = 108;
+      state.inv = Math.max(state.inv, 30);
+      setBoostReady(false);
+      addPopup(state.player.x + 85, state.player.y + 25, 'TURBO DASH!', '#79fff9');
+      addParticles(state.player.x, state.player.y + state.player.h/2, '#5bf5ff', 22, 13);
+      playSound('super');
     };
 
     const handleKeyDown = (e: KeyboardEvent) => {
@@ -560,15 +582,39 @@ export default function App() {
       }
       if (e.code === 'Space' || e.code === 'ArrowUp') {
         e.preventDefault();
+        if (e.repeat) return;
         if (statusRef.current === 'menu' || statusRef.current === 'over') {
           startGame();
         } else if (statusRef.current === 'playing') {
           handleJump();
         }
       }
+      if (e.code === 'ShiftLeft' || e.code === 'ShiftRight' || e.code === 'KeyD') {
+        e.preventDefault();
+        if (!e.repeat) handleDash();
+      }
+      if (e.code === 'KeyE' && !noticeRef.current) {
+        e.preventDefault();
+        if (!e.repeat) tradeTires();
+      }
+      if ((e.code === 'KeyQ' || e.code === 'KeyM' || e.code === 'KeyI') && !noticeRef.current) {
+        e.preventDefault();
+        rpgWasPlaying.current = statusRef.current === 'playing';
+        if (rpgWasPlaying.current) {
+          statusRef.current = 'paused';
+          setGameStatus('paused');
+        }
+        rpgOpenRef.current = true;
+        setRpgOpen(true);
+      }
       if (e.code === 'KeyP' || e.code === 'Escape') {
-        if (statusRef.current === 'playing') setGameStatus('paused');
-        else if (statusRef.current === 'paused') setGameStatus('playing');
+        if (statusRef.current === 'playing') {
+          statusRef.current = 'paused';
+          setGameStatus('paused');
+        } else if (statusRef.current === 'paused') {
+          statusRef.current = 'playing';
+          setGameStatus('playing');
+        }
       }
     };
 
@@ -651,7 +697,16 @@ export default function App() {
 
       // Souvenir trail: maps, wine, USD, postcards and retro CD-ROMs.
       if (state.frame % 45 === 10) state.souvenirs.push({ x: W + 25, y: GROUND - 70 - Math.random() * 110, type: Math.floor(Math.random() * 5), bob: Math.random() * 6.28 });
-      const effectiveSpeed = state.slowActive ? state.speed * 0.5 : state.speed;
+      const normalSpeed = state.slowActive ? state.speed * 0.5 : state.speed;
+      const effectiveSpeed = normalSpeed * (state.dashTimer > 0 ? 1.8 : 1);
+      if (state.dashTimer > 0) state.dashTimer--;
+      if (state.dashCooldown > 0) {
+        state.dashCooldown--;
+        if (state.dashCooldown === 0) setBoostReady(true);
+      }
+      if (state.dashTimer > 0 && state.frame % 3 === 0) {
+        addParticles(state.player.x+6, state.player.y+state.player.h*0.8, '#7ef7fe', 2, 10);
+      }
       for (const item of state.souvenirs) {
         item.x -= effectiveSpeed;
         item.bob += .09;
@@ -701,6 +756,7 @@ export default function App() {
         state.player.y = GROUND - state.player.h;
         state.player.vy = 0;
         state.player.jump = false;
+        state.jumpsRemaining = 2;
       }
 
       // Spawning
@@ -1222,6 +1278,16 @@ export default function App() {
       const ph = state.player.h;
       const px = state.player.x;
       const py = state.player.y + bob;
+      if (state.dashTimer > 0) {
+        ctx.save();
+        ctx.shadowColor = '#6dfcfa'; ctx.shadowBlur = 18;
+        for (let i=0;i<5;i++){
+          const yy = py + 14 + i*26;
+          ctx.fillStyle = i%2 ? '#c9fff8bb' : '#f76bf7cc';
+          ctx.fillRect(px-34-(i%3)*17, yy, 33+(i%2)*11, 3);
+        }
+        ctx.restore();
+      }
 
       // Invincibility flash
       if (state.inv > 0 && Math.floor(state.inv / 4) % 2 === 0) ctx.globalAlpha = 0.5;
@@ -1426,41 +1492,17 @@ export default function App() {
 
     const draw = () => {
       ctx.clearRect(0, 0, W, H);
-      drawSky();
-      // Stage-specific cinematic skyline with bold landmark markers.
       const world = STAGES[getStageIndex(state.frame)];
-      const stageGradient = ctx.createLinearGradient(0, 0, 0, GROUND);
-      stageGradient.addColorStop(0, world.sky[0]);
-      stageGradient.addColorStop(1, world.sky[1]);
-      ctx.globalAlpha = getStageIndex(state.frame) >= 9 ? 0.45 : 0.72;
-      ctx.fillStyle = stageGradient;
-      ctx.fillRect(0, 0, W, GROUND);
-      ctx.globalAlpha = 1;
-      if (atlasReady) {
-        const stageArt = STAGE_ART[getStageIndex(state.frame)];
-        const { tile } = GAME_ART[stageArt];
-        ctx.save();
-        ctx.globalAlpha = getStageIndex(state.frame) >= 9 ? 0.48 : 0.72;
-        ctx.imageSmoothingEnabled = false;
-        ctx.drawImage(artAtlas, (tile % 4) * 96, Math.floor(tile / 4) * 54, 96, 54, 0, 48, W, GROUND - 48);
-        ctx.restore();
-      }
-      if (getStageIndex(state.frame) >= 9) { ctx.fillStyle = '#b7e9ff44'; ctx.fillRect(0, 0, W, GROUND); }
-      ctx.font = 'bold 22px sans-serif';
-      ctx.textAlign = 'center';
-      world.landmarks.forEach((mark, i) => ctx.fillText(mark, ((i * 290 + 130 - state.distanceTraveled * .07) % 1050 + 1050) % 1050 - 80, GROUND - 65 - i * 20));
-      ctx.textAlign = 'left';
-      ctx.fillStyle = '#070b22cc';
-      ctx.fillRect(200, 8, 390, 42);
-      ctx.fillStyle = world.accent;
-      ctx.font = 'bold 19px monospace';
-      ctx.fillText('🌍 ' + world.city, 213, 26);
-      ctx.fillStyle = '#fff';
-      ctx.font = '12px monospace';
-      ctx.fillText(world.place, 213, 42);
-
-      state.bgTrucks.forEach(drawBgTruck);
-      drawRoad();
+      drawCinematicPort(ctx, {
+        frame: state.frame,
+        travel: state.distanceTraveled,
+        ground: GROUND,
+        city: world.city,
+        accent: world.accent,
+        ghost: getStageIndex(state.frame) >= 9,
+        reducedMotion: window.matchMedia('(prefers-reduced-motion: reduce)').matches
+      });
+      // The cinematic renderer already includes layered trucks and road.
       drawMer();
       drawPing();
       state.powerUps.forEach(drawPowerUp);
@@ -1502,13 +1544,7 @@ export default function App() {
         ctx.fillRect(0, 0, W, H);
       }
 
-      drawHUD();
       if (noticeRef.current?.kind === 'truckstop') drawTruckStop();
-      ctx.save();
-      ctx.fillStyle = '#090b25dd'; ctx.fillRect(260, 52, 310, 27);
-      ctx.fillStyle = '#ffeb78'; ctx.font = 'bold 15px monospace';
-      ctx.textAlign = 'center'; ctx.fillText('✨ IMMORTAL · SOUVENIRS: ' + state.souvenirCount, 415, 71);
-      ctx.restore();
 
       // Pause overlay
       if (statusRef.current === 'paused') {
@@ -1548,7 +1584,7 @@ export default function App() {
       rafId = requestAnimationFrame(loop);
     };
 
-    engineRef.current = { start: startGame, jump: handleJump, dismissNotice, tradeTires };
+    engineRef.current = { start: startGame, jump: handleJump, dash: handleDash, dismissNotice, tradeTires };
 
     initBg();
     rafId = requestAnimationFrame(loop);
@@ -1569,6 +1605,7 @@ export default function App() {
     engineRef.current?.start();
   };
   const handleJumpButton = () => engineRef.current?.jump();
+  const handleDashButton = () => engineRef.current?.dash();
   const openRpgHub = () => {
     if (noticeRef.current) return;
     rpgWasPlaying.current = gameStatus === 'playing';
@@ -1605,21 +1642,21 @@ export default function App() {
   };
 
   return (
-    <div className="arcade-shell flex flex-col items-center justify-center p-3 sm:p-6">
-      <main className="relative w-full max-w-[920px]">
+    <div className="arcade-shell flex flex-col items-center justify-center p-2 sm:p-4">
+      <main className="relative w-full max-w-[1440px]">
         {/* Header */}
         <div className="text-center mb-5">
           <div className="mb-3 flex flex-wrap justify-center gap-2"><span className="arcade-tag">🎮 NEON ARCADE</span><span className="arcade-tag">⚡ ONE-TAP RUNNER</span><span className="arcade-tag">🏆 BEST {highScore.toLocaleString()}</span></div>
           <h1 className="arcade-title text-2xl md:text-4xl font-black text-green-300 font-mono">
-            BLACKHUJUS the GREEN HAIR STYLE
+            BLACKHUJUS: SHADOW ROUTES · PIXEL WORLD
           </h1>
           <p className="text-violet-200 text-sm mt-2 font-mono">
-            Blackhujus collects black truck tires on the interstate. Gotta go fast-ish.
+            60 FPS physics · cinematic neon ports · double jumps · turbo dash · absurd RPG quests
           </p>
         </div>
 
         {/* Game Container */}
-        <div className="arcade-panel relative bg-black border-2 border-green-400 rounded-2xl p-2 sm:p-3">
+        <div className="world-game">
           <canvas
             ref={canvasRef}
             width={800}
@@ -1627,6 +1664,16 @@ export default function App() {
             className="w-full rounded-xl cursor-pointer block"
             style={{ imageRendering: 'auto', touchAction: 'manipulation' }}
           />
+          {(gameStatus === 'playing' || gameStatus === 'paused') && (
+            <ArcadeChrome
+              lives={lives} score={score} highScore={highScore} combo={combo}
+              tires={tireCount} gold={goldBars} souvenirs={souvenirs}
+              stageIndex={stageIndex} boostReady={boostReady}
+              onRpg={openRpgHub}
+              onTrade={() => { engineRef.current?.tradeTires(); }}
+              onDash={handleDashButton} onJump={handleJumpButton}
+            />
+          )}
 
           {/* Menu Overlay */}
           {gameStatus === 'menu' && (
@@ -1726,8 +1773,7 @@ export default function App() {
           </div>
         )}
 
-        {/* Dedicated touch/keyboard-friendly action, separate from the canvas */}
-        <div className="mt-4 flex justify-center"><button type="button" onClick={handleJumpButton} disabled={gameStatus !== 'playing' || !!notice} className="arcade-button arcade-jump rounded-2xl px-10 py-3" aria-label="Jump over obstacles">⬆ JUMP!</button></div>
+        {/* The main JUMP and DASH controls live in the interactive pixel HUD. */}
 
         <div className="mt-3 text-center text-yellow-200 font-mono text-xs">🦍 WORLD TOUR · ❤️ {lives} LIVES · 🪙 {goldBars} GOLD · 🗺️ 🍷 💵 💌 💿 SOUVENIRS {souvenirs} · {ghostMode ? '👻 GHOST WORLD' : '⚡ WORLD TOUR'}</div>
         <div className="mt-3 text-center text-violet-200 font-mono text-xs sm:text-sm">🌍 STAGE {stageIndex + 1} / 11 · {STAGES[stageIndex].city} · {STAGES[stageIndex].place} · 5 seconds per stage</div>
@@ -1771,7 +1817,7 @@ export default function App() {
         {/* Instructions */}
         <div className="arcade-tip mt-4 text-center">
           <p className="text-gray-500 text-xs font-mono">
-            SPACE / ↑ / TAP / JUMP button = jump • P / ESC = pause • avoid cones, potholes & barriers • golden SUPER TIRE = invincible
+            SPACE / ↑ / TAP / JUMP = double jump • SHIFT / D = turbo dash • P / ESC = pause • E = trade • Q/M/I = RPG • avoid cones, potholes & barriers • golden SUPER TIRE = invincible
           </p>
           <p className="text-gray-600 text-xs font-mono mt-1">
             Collect tires in sequence for combo multiplier • 🛡 Shield • 🧲 Magnet • ⏱ Slow-mo • 🍷 White wine = gold bar • 🍇 Black wine = gorilla

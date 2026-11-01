@@ -1,5 +1,6 @@
 import { useEffect, useState } from 'react';
 import { GAME_ART, tileStyle, type ArtKey } from './assets/gameArt';
+import { GORILLA_URL, MERHUJUS_URL, MRPING_URL } from './assets/extra';
 import './shadowRoutes.css';
 
 type Tab = 'routes' | 'crew' | 'quests' | 'archive';
@@ -121,7 +122,11 @@ export default function ShadowRoutes({
               <div className="rpg-crew-banner" style={tileStyle('crew')} role="img" aria-label="Four playable story characters"></div>
               <div className="rpg-crew-grid">
                 {CREW.map(c => <button key={c.id} className={activeNpc === c.id ? 'rpg-crew-card active' : 'rpg-crew-card'} onClick={() => { setActiveNpc(c.id);setScene(c.art);setDialogue(c.quote); }}>
-                  <div className="rpg-portrait" style={tileStyle(c.art)}></div>
+                  <div className="rpg-portrait" style={tileStyle(c.art)}>
+                    {c.id === 'gorilla' && <img src={GORILLA_URL} alt="" loading="lazy" />}
+                    {c.id === 'trucker' && <img src={MERHUJUS_URL} alt="" loading="lazy" />}
+                    {c.id === 'ping' && <img src={MRPING_URL} alt="" loading="lazy" />}
+                  </div>
                   <strong>{c.emoji} {c.name}</strong><small>{c.title}</small>
                 </button>)}
               </div>

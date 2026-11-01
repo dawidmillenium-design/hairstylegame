@@ -5,6 +5,8 @@ import { STAGES, STAGE_FRAMES, getStageIndex } from './stages';
 import { HERO_BODY_URL, HERO_PORTRAIT_URL } from './assets/hero';
 import { GORILLA_URL, MERHUJUS_URL, MRPING_URL } from './assets/extra';
 import { TRUCKER_PIXEL_URL } from './assets/truckerPixel';
+import { GAME_ART_ATLAS, STAGE_ART, GAME_ART } from './assets/gameArt';
+import ShadowRoutes from './ShadowRoutes';
 
 type GameNotice = { kind: 'call' | 'truckstop'; title: string; message: string; detail?: string };
 const TRUCKER_GREETING = 'Hello Blackhujus. Good luck with black truck tires. I wait for you in secret ocean containers.';
@@ -26,7 +28,7 @@ const DJ_SHOUTS = [
 
 export default function App() {
   const canvasRef = useRef<HTMLCanvasElement>(null);
-  const engineRef = useRef<{ start: () => void; jump: () => void; dismissNotice: () => void } | null>(null);
+  const engineRef = useRef<{ start: () => void; jump: () => void; dismissNotice: () => void; tradeTires: () => boolean } | null>(null);
   const [gameStatus, setGameStatus] = useState<'menu' | 'playing' | 'paused' | 'over'>('menu');
   const [score, setScore] = useState(0);
   const [highScore, setHighScore] = useState(0);
@@ -38,6 +40,9 @@ export default function App() {
   const [notice, setNotice] = useState<GameNotice | null>(null);
   const noticeRef = useRef<GameNotice | null>(null);
   const [goldBars, setGoldBars] = useState(0);
+  const [rpgOpen, setRpgOpen] = useState(false);
+  const rpgOpenRef = useRef(false);
+  const rpgWasPlaying = useRef(false);
   const [stageIndex, setStageIndex] = useState(0);
   const [souvenirs, setSouvenirs] = useState(0);
   const [ghostMode, setGhostMode] = useState(false);
@@ -74,6 +79,11 @@ export default function App() {
 
     const ctx = canvas.getContext('2d');
     if (!ctx) return;
+    const artAtlas = new Image();
+    let atlasReady = false;
+    artAtlas.onload = () => { atlasReady = true; };
+    artAtlas.onerror = () => { atlasReady = false; };
+    artAtlas.src = GAME_ART_ATLAS;
 
     // Responsive sizing
     const resize = () => {
@@ -486,6 +496,19 @@ export default function App() {
       state.pops.push({ x, y, txt, c: color, life: 60, maxLife: 60 });
     };
 
+    const tradeTires = (): boolean => {
+      if (state.tireCount < 5 || !state.running) return false;
+      state.tireCount -= 5;
+      state.goldBars += 1;
+      state.score += 200;
+      setTireCount(state.tireCount);
+      setGoldBars(state.goldBars);
+      setScore(Math.floor(state.score));
+      addParticles(state.player.x + 45, state.player.y, '#ffd447', 22);
+      addPopup(state.player.x + 30, state.player.y - 20, '+1 GOLD · +200 SCORE', '#ffe779');
+      playSound('super');
+      return true;
+    };
     const startGame = () => {
       state = initState();
       statusRef.current = 'playing';
@@ -529,6 +552,7 @@ export default function App() {
     };
 
     const handleKeyDown = (e: KeyboardEvent) => {
+      if (rpgOpenRef.current) return;
       if (noticeRef.current && (e.code === 'Space' || e.code === 'Enter' || e.code === 'Escape')) {
         e.preventDefault();
         dismissNotice();
@@ -1412,6 +1436,15 @@ export default function App() {
       ctx.fillStyle = stageGradient;
       ctx.fillRect(0, 0, W, GROUND);
       ctx.globalAlpha = 1;
+      if (atlasReady) {
+        const stageArt = STAGE_ART[getStageIndex(state.frame)];
+        const { tile } = GAME_ART[stageArt];
+        ctx.save();
+        ctx.globalAlpha = getStageIndex(state.frame) >= 9 ? 0.48 : 0.72;
+        ctx.imageSmoothingEnabled = false;
+        ctx.drawImage(artAtlas, (tile % 4) * 160, Math.floor(tile / 4) * 90, 160, 90, 0, 48, W, GROUND - 48);
+        ctx.restore();
+      }
       if (getStageIndex(state.frame) >= 9) { ctx.fillStyle = '#b7e9ff44'; ctx.fillRect(0, 0, W, GROUND); }
       ctx.font = 'bold 22px sans-serif';
       ctx.textAlign = 'center';
@@ -1515,7 +1548,7 @@ export default function App() {
       rafId = requestAnimationFrame(loop);
     };
 
-    engineRef.current = { start: startGame, jump: handleJump, dismissNotice };
+    engineRef.current = { start: startGame, jump: handleJump, dismissNotice, tradeTires };
 
     initBg();
     rafId = requestAnimationFrame(loop);
@@ -1536,6 +1569,31 @@ export default function App() {
     engineRef.current?.start();
   };
   const handleJumpButton = () => engineRef.current?.jump();
+  const openRpgHub = () => {
+    if (noticeRef.current) return;
+    rpgWasPlaying.current = gameStatus === 'playing';
+    if (rpgWasPlaying.current) {
+      statusRef.current = 'paused';
+      setGameStatus('paused');
+    }
+    rpgOpenRef.current = true;
+    setRpgOpen(true);
+  };
+  const closeRpgHub = () => {
+    rpgOpenRef.current = false;
+    setRpgOpen(false);
+    if (rpgWasPlaying.current) {
+      statusRef.current = 'playing';
+      setGameStatus('playing');
+    }
+    rpgWasPlaying.current = false;
+  };
+  const startFromRpg = () => {
+    rpgWasPlaying.current = false;
+    rpgOpenRef.current = false;
+    setRpgOpen(false);
+    engineRef.current?.start();
+  };
   const dismissCutscene = () => engineRef.current?.dismissNotice();
   const togglePause = () => {
     if (noticeRef.current) return;
@@ -1596,7 +1654,8 @@ export default function App() {
                 >
                   📞 ANSWER TRUCKER'S CALL
                 </button>
-                <p className="text-gray-300 text-xs mt-2 font-mono">SPACE / ↑ / TAP = jump • P / ESC = pause</p>
+                <button type="button" onClick={openRpgHub} className="arcade-button mt-2 px-5 py-2 bg-purple-700 text-white border border-fuchsia-400 rounded-xl font-bold font-mono text-sm">🌍 EXPLORE SHADOW ROUTES RPG</button>
+                <p className="text-gray-300 text-xs mt-2 font-mono">SPACE / ↑ / TAP = jump · P / ESC = pause · RPG = quests</p>
               </div>
             </div>
           )}
@@ -1669,6 +1728,7 @@ export default function App() {
         {gameStatus === 'over' && !secretUnlocked && stageIndex >= 8 && <div className="mt-3 text-center"><button className="arcade-button rounded-xl bg-fuchsia-500 text-white px-5 py-3 font-bold" onClick={() => { setSecretUnlocked(true); secretRef.current = true; handleStart(); }}>👻 ENTER GHOST WORLDS: BOSTON + TEXAS–MEXICO BORDER</button></div>}
         {/* Controls */}
         <div className="arcade-controls mt-5 flex flex-wrap justify-center items-center gap-3">
+          <button type="button" onClick={openRpgHub} disabled={!!notice} className="arcade-button px-4 py-3 rounded-xl bg-fuchsia-700 text-white font-mono text-sm font-bold">🌍 SHADOW ROUTES RPG</button>
           <button
             onClick={() => setSoundEnabled(value => !value)}
             aria-pressed={soundEnabled}
@@ -1712,6 +1772,15 @@ export default function App() {
           </p>
         </div>
       </main>
+      {rpgOpen && (
+        <ShadowRoutes
+          onClose={closeRpgHub}
+          onArcade={startFromRpg}
+          onTrade={() => engineRef.current?.tradeTires() ?? false}
+          tireCount={tireCount}
+          goldBars={goldBars}
+        />
+      )}
     </div>
   );
 }

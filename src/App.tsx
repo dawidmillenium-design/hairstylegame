@@ -1,5 +1,6 @@
 import { useEffect, useRef, useState } from 'react';
 import './arcade.css';
+import { STAGES, STAGE_FRAMES, getStageIndex } from './stages';
 import { HERO_BODY_URL, HERO_PORTRAIT_URL } from './assets/hero';
 import { GORILLA_URL, MERHUJUS_URL, MRPING_URL } from './assets/extra';
 
@@ -21,6 +22,10 @@ export default function App() {
   const [lives, setLives] = useState(3);
   const [combo, setCombo] = useState(0);
   const [soundEnabled, setSoundEnabled] = useState(true);
+  const [stageIndex, setStageIndex] = useState(0);
+  const [secretUnlocked, setSecretUnlocked] = useState(false);
+  const secretRef = useRef(false);
+  useEffect(() => { secretRef.current = secretUnlocked; }, [secretUnlocked]);
 
   // Refs so the (single-mount) game engine always reads fresh values
   const statusRef = useRef(gameStatus);
@@ -405,6 +410,7 @@ export default function App() {
       initBg();
       setGameStatus('playing');
       setScore(0);
+      setStageIndex(0);
       setTireCount(0);
       setLives(3);
       setCombo(0);
@@ -461,6 +467,18 @@ export default function App() {
     const update = () => {
       if (!state.running || statusRef.current !== 'playing') return;
       state.frame++;
+      const stageNumber = getStageIndex(state.frame);
+      if (stageNumber !== getStageIndex(state.frame - 1)) setStageIndex(stageNumber);
+      if (state.frame >= 9 * STAGE_FRAMES && !secretRef.current) {
+        state.running = false;
+        setGameStatus('over');
+        return;
+      }
+      if (state.frame >= 11 * STAGE_FRAMES) {
+        state.running = false;
+        setGameStatus('over');
+        return;
+      }
 
       const effectiveSpeed = state.slowActive ? state.speed * 0.5 : state.speed;
       state.distanceTraveled += effectiveSpeed;
@@ -1193,6 +1211,28 @@ export default function App() {
     const draw = () => {
       ctx.clearRect(0, 0, W, H);
       drawSky();
+      // Stage-specific cinematic skyline with bold landmark markers.
+      const world = STAGES[getStageIndex(state.frame)];
+      const stageGradient = ctx.createLinearGradient(0, 0, 0, GROUND);
+      stageGradient.addColorStop(0, world.sky[0]);
+      stageGradient.addColorStop(1, world.sky[1]);
+      ctx.globalAlpha = 0.72;
+      ctx.fillStyle = stageGradient;
+      ctx.fillRect(0, 0, W, GROUND);
+      ctx.globalAlpha = 1;
+      ctx.font = 'bold 22px sans-serif';
+      ctx.textAlign = 'center';
+      world.landmarks.forEach((mark, i) => ctx.fillText(mark, ((i * 290 + 130 - state.distanceTraveled * .07) % 1050 + 1050) % 1050 - 80, GROUND - 65 - i * 20));
+      ctx.textAlign = 'left';
+      ctx.fillStyle = '#070b22cc';
+      ctx.fillRect(200, 8, 390, 42);
+      ctx.fillStyle = world.accent;
+      ctx.font = 'bold 19px monospace';
+      ctx.fillText('🌍 ' + world.city, 213, 26);
+      ctx.fillStyle = '#fff';
+      ctx.font = '12px monospace';
+      ctx.fillText(world.place, 213, 42);
+
       state.bgTrucks.forEach(drawBgTruck);
       drawRoad();
       drawMer();
@@ -1358,6 +1398,8 @@ export default function App() {
         {/* Dedicated touch/keyboard-friendly action, separate from the canvas */}
         <div className="mt-4 flex justify-center"><button type="button" onClick={handleJumpButton} disabled={gameStatus !== 'playing'} className="arcade-button arcade-jump rounded-2xl px-10 py-3" aria-label="Jump over obstacles">⬆ JUMP!</button></div>
 
+        <div className="mt-3 text-center text-violet-200 font-mono text-xs sm:text-sm">🌍 STAGE {stageIndex + 1} / 11 · {STAGES[stageIndex].city} · {STAGES[stageIndex].place} · 5 seconds per stage</div>
+        {gameStatus === 'over' && !secretUnlocked && stageIndex >= 8 && <div className="mt-3 text-center"><button className="arcade-button rounded-xl bg-fuchsia-500 text-white px-5 py-3 font-bold" onClick={() => { setSecretUnlocked(true); secretRef.current = true; handleStart(); }}>🔓 UNLOCK SECRET WORLD TOUR: BOSTON + MEXICO BORDER</button></div>}
         {/* Controls */}
         <div className="arcade-controls mt-5 flex flex-wrap justify-center items-center gap-3">
           <button

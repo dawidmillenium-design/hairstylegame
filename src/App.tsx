@@ -24,6 +24,9 @@ export default function App() {
   const [soundEnabled, setSoundEnabled] = useState(true);
   const [stageIndex, setStageIndex] = useState(0);
   const [souvenirs, setSouvenirs] = useState(0);
+  const [goldBars, setGoldBars] = useState(0);
+  const [shipments, setShipments] = useState(0);
+  const [templeVisited, setTempleVisited] = useState(false);
   const [ghostMode, setGhostMode] = useState(false);
   const [secretUnlocked, setSecretUnlocked] = useState(false);
   const secretRef = useRef(false);
@@ -257,6 +260,11 @@ export default function App() {
       powerUps: PowerUp[];
       souvenirs: Souvenir[];
       souvenirCount: number;
+      goldBars: number;
+      shipments: number;
+      whiteForm: boolean;
+      parkingTimer: number;
+      templeTimer: number;
       score: number;
       tireCount: number;
       speed: number;
@@ -299,6 +307,11 @@ export default function App() {
       powerUps: [],
       souvenirs: [],
       souvenirCount: 0,
+      goldBars: 0,
+      shipments: 0,
+      whiteForm: false,
+      parkingTimer: 0,
+      templeTimer: 0,
       score: 0,
       tireCount: 0,
       speed: 5,
@@ -422,6 +435,9 @@ export default function App() {
       setTireCount(0);
       setLives(999);
       setSouvenirs(0);
+      setGoldBars(0);
+      setShipments(0);
+      setTempleVisited(false);
       setGhostMode(false);
       setCombo(0);
     };
@@ -477,22 +493,48 @@ export default function App() {
     const update = () => {
       if (!state.running || statusRef.current !== 'playing') return;
       state.frame++;
+      // Truck-stop cutscene every ten seconds. Exchange collected tires for gold.
+      if (state.frame % 600 === 0) {
+        state.parkingTimer = 125;
+        const bars = Math.floor(state.tireCount / 5);
+        if (bars > 0) {
+          state.tireCount -= bars * 5;
+          state.goldBars += bars;
+          state.shipments += bars;
+          state.score += bars * 200;
+          setTireCount(state.tireCount);
+          setGoldBars(state.goldBars);
+          setShipments(state.shipments);
+          addPopup(380, 170, 'POST TO PLAYA BLANCA +'+bars+' GOLD', '#ffe568');
+          playSound('super');
+        } else addPopup(380, 170, 'COLLECT 5 TIRES FOR 1 GOLD BAR', '#ffffff');
+      }
+      if (state.parkingTimer > 0) state.parkingTimer--;
+      // The tire temple is a surreal, non-lethal transformation.
+      if (state.frame === 3300) {
+        state.templeTimer = 240;
+        state.whiteForm = true;
+        setTempleVisited(true);
+        state.score += 1000;
+        playSound('super');
+      }
+      if (state.templeTimer > 0) state.templeTimer--;
       const stageNumber = getStageIndex(state.frame);
       if (stageNumber !== getStageIndex(state.frame - 1)) setStageIndex(stageNumber);
       if (stageNumber >= 9 && !ghostMode) setGhostMode(true);
-      if (state.frame >= 9 * STAGE_FRAMES && !secretRef.current) {
+      if (state.frame >= 9 * STAGE_FRAMES && !secretRef.current && state.frame >= 3540) {
         state.running = false;
         setGameStatus('over');
         return;
       }
-      if (state.frame >= 11 * STAGE_FRAMES) {
+      if (state.frame >= 11 * STAGE_FRAMES && state.templeTimer === 0 && state.frame >= 3540) {
         state.running = false;
         setGameStatus('over');
         return;
       }
 
       // Souvenir trail: maps, wine, USD, postcards and retro CD-ROMs.
-      if (state.frame % 45 === 10) state.souvenirs.push({ x: W + 25, y: GROUND - 70 - Math.random() * 110, type: Math.floor(Math.random() * 5), bob: Math.random() * 6.28 });
+      if (state.frame % 35 === 10) state.souvenirs.push({ x: W + 25, y: GROUND - 70 - Math.random() * 110, type: Math.floor(Math.random() * 10), bob: Math.random() * 6.28 });
       const effectiveSpeed = state.slowActive ? state.speed * 0.5 : state.speed;
       for (const item of state.souvenirs) {
         item.x -= effectiveSpeed;
@@ -502,7 +544,7 @@ export default function App() {
           state.souvenirCount++;
           state.score += 75 + state.combo * 10;
           state.inv = Math.max(state.inv, 60);
-          addPopup(state.player.x + 45, state.player.y - 15, ['MAP +75','WINE +75','USD +75','POSTCARD +75','CD-ROM +75'][item.type], '#fdf68d');
+          addPopup(state.player.x + 45, state.player.y - 15, ['MAP +75','WINE +75','USD +75','POSTCARD +75','CD-ROM +75','PASSPORT +75','VINYL +75','CAMERA +75','KEY +75','STAR +75'][item.type], '#fdf68d');
           addParticles(state.player.x + 50, state.player.y + 50, '#ffdd55', 12);
           playSound('collect');
           setSouvenirs(state.souvenirCount);
@@ -1092,6 +1134,7 @@ export default function App() {
         ctx.save();
         ctx.imageSmoothingEnabled = true;
         ctx.drawImage(gorillaImg, px + pw / 2 - gw / 2, py + ph - gh, gw, gh);
+        if (state.whiteForm) { ctx.globalCompositeOperation = 'screen'; ctx.fillStyle = '#ffffffaa'; ctx.fillRect(px + pw / 2 - gw / 2, py + ph - gh, gw, gh); ctx.globalCompositeOperation = 'source-over'; }
         ctx.restore();
       } else if (heroReady) {
         ctx.save();
@@ -1276,7 +1319,7 @@ export default function App() {
         ctx.textAlign = 'center';
         ctx.shadowColor = '#f0f'; ctx.shadowBlur = 18;
         ctx.font = '35px sans-serif';
-        ctx.fillText(['🗺️','🍷','💵','💌','💿'][item.type], item.x, item.y + Math.sin(item.bob) * 8);
+        ctx.fillText(['🗺️','🍷','💵','💌','💿','🛂','💽','📸','🗝️','🌟'][item.type], item.x, item.y + Math.sin(item.bob) * 8);
         ctx.restore();
       });
       state.tires.forEach(drawTire);
@@ -1310,6 +1353,19 @@ export default function App() {
       }
 
       drawHUD();
+      if (state.parkingTimer > 0 || state.templeTimer > 0) {
+        ctx.save();
+        ctx.fillStyle = '#090b25ed'; ctx.fillRect(90, 95, 620, 245);
+        ctx.strokeStyle = '#f8d451'; ctx.lineWidth = 4; ctx.strokeRect(90, 95, 620, 245);
+        ctx.textAlign = 'center'; ctx.fillStyle = '#ffe568'; ctx.font = 'bold 27px monospace';
+        ctx.fillText(state.templeTimer > 0 ? '🛞 BLACK TRUCK TIRE TEMPLE 🛞' : '🚛 SEMI-TRUCK GOLD EXCHANGE 🚛', 400, 150);
+        ctx.font = '19px monospace'; ctx.fillStyle = '#ffffff';
+        ctx.fillText(state.templeTimer > 0 ? '⚰️ MAGIC COFFIN · WHITE GHOST TRANSFORMATION' : '5 BLACK TIRES → 1 GOLD BAR', 400, 207);
+        ctx.font = '16px monospace';
+        ctx.fillText(state.templeTimer > 0 ? '✨ IMMORTAL · REBORN IN WHITE ✨' : '📦 FICTIONAL POSTCARD SHIPMENT TO PLAYA BLANCA, CARTAGENA', 400, 251);
+        ctx.fillText('GOLD: '+state.goldBars+'  ·  PARCELS: '+state.shipments, 400, 290);
+        ctx.restore();
+      }
       ctx.save();
       ctx.fillStyle = '#090b25dd'; ctx.fillRect(260, 52, 310, 27);
       ctx.fillStyle = '#ffeb78'; ctx.font = 'bold 15px monospace';
@@ -1444,6 +1500,7 @@ export default function App() {
         {/* Dedicated touch/keyboard-friendly action, separate from the canvas */}
         <div className="mt-4 flex justify-center"><button type="button" onClick={handleJumpButton} disabled={gameStatus !== 'playing'} className="arcade-button arcade-jump rounded-2xl px-10 py-3" aria-label="Jump over obstacles">⬆ JUMP!</button></div>
 
+        <div className="mt-2 text-center text-amber-200 font-mono text-xs">♾️ INFINITE LIVES · 🪙 GOLD {goldBars} · 📦 PLAYA BLANCA PARCELS {shipments} {templeVisited ? '· ⚰️ WHITE GHOST FORM' : ''}</div>
         <div className="mt-3 text-center text-yellow-200 font-mono text-xs">🦍 IMMORTAL HERO · 🗺️ 🍷 💵 💌 💿 SOUVENIRS {souvenirs} · {ghostMode ? '👻 GHOST WORLD' : '⚡ WORLD TOUR'}</div>
         <div className="mt-3 text-center text-violet-200 font-mono text-xs sm:text-sm">🌍 STAGE {stageIndex + 1} / 11 · {STAGES[stageIndex].city} · {STAGES[stageIndex].place} · 5 seconds per stage</div>
         {gameStatus === 'over' && !secretUnlocked && stageIndex >= 8 && <div className="mt-3 text-center"><button className="arcade-button rounded-xl bg-fuchsia-500 text-white px-5 py-3 font-bold" onClick={() => { setSecretUnlocked(true); secretRef.current = true; handleStart(); }}>👻 ENTER GHOST WORLDS: BOSTON + TEXAS–MEXICO BORDER</button></div>}

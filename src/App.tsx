@@ -412,12 +412,13 @@ export default function App() {
 
     const startGame = () => {
       state = initState();
+      if (secretRef.current) state.frame = 9 * STAGE_FRAMES;
       state.player.w = heroW;
       state.player.y = GROUND - state.player.h;
       initBg();
       setGameStatus('playing');
       setScore(0);
-      setStageIndex(0);
+      setStageIndex(secretRef.current ? 9 : 0);
       setTireCount(0);
       setLives(999);
       setSouvenirs(0);

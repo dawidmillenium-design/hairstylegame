@@ -1,9 +1,10 @@
 /**
  * All twelve supplied/generated image references are represented in a lightweight
  * 4 × 3 pixel-art atlas. The source artwork remains available in the project bundle.
- * Tiles are 160×90 for intentionally crisp 16-bit pixel-art rendering.
+ * Tiles are 96×54 for intentionally crisp 16-bit pixel-art rendering.
  */
-export const GAME_ART_ATLAS = `${import.meta.env.BASE_URL}art/art-atlas.webp`;
+import { GAME_ART_ATLAS } from './packedAtlas';
+export { GAME_ART_ATLAS };
 export type ArtKey =
   | 'crew' | 'character' | 'storyboard' | 'truckLot'
   | 'shadowMap' | 'threeLeaders' | 'bunnyCafe' | 'hongKong'

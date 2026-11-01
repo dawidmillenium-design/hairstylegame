@@ -66,3 +66,45 @@
   .world-items>span:nth-child(2),.world-items>span:nth-child(3){display:none}
 }
 @media(prefers-reduced-motion:reduce){.world-chrome *{transition:none!important;animation:none!important}}
+
+
+/* PIXEL WORLD REFINEMENT · HDR-inspired reflections with GPU-friendly compositing. */
+.world-game {
+  background:
+    radial-gradient(circle at 53% 12%, #75318666, transparent 45%),
+    linear-gradient(150deg, #080c23, #1d1741 54%, #0a1025);
+  contain: paint;
+  box-shadow:
+    0 0 0 2px #5ef7f4,
+    0 0 0 6px #24123b,
+    0 0 28px #e43df47a,
+    0 0 58px #27ddf543,
+    0 26px 70px #000d;
+}
+.world-game > canvas {
+  display:block;
+  width:100%;
+  transform:translateZ(0);
+  backface-visibility:hidden;
+  filter:saturate(1.13) contrast(1.06);
+}
+.world-chrome {
+  filter:drop-shadow(0 2px 3px #060b28bd);
+}
+.world-hud-panel {
+  background:linear-gradient(145deg,#0c1332ee,#090b26c8);
+  border-image:linear-gradient(125deg,#5bf8ef,#9d50f8,#ed58b4) 1;
+  box-shadow:inset 0 1px 0 #ffffff1c,0 0 10px #5ddffa22,0 5px 16px #0008;
+}
+.world-party > div { transition:box-shadow .16s ease,border-color .16s ease; }
+.world-party-main { box-shadow:0 0 11px #f4d469a5,inset 0 0 15px #f3b64647; }
+.world-action-buttons button:active,.world-items button:active {
+  transform:translateY(1px);filter:brightness(1.17);
+}
+.world-items button:not(:disabled):hover {
+  box-shadow:0 0 20px #69ffa7aa;
+}
+@media(prefers-reduced-motion:reduce) {
+  .world-game > canvas {filter:none;}
+  .world-action-buttons button,.world-items button {transition:none;}
+}

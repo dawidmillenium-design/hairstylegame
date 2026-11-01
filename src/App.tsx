@@ -522,12 +522,12 @@ export default function App() {
       const stageNumber = getStageIndex(state.frame);
       if (stageNumber !== getStageIndex(state.frame - 1)) setStageIndex(stageNumber);
       if (stageNumber >= 9 && !ghostMode) setGhostMode(true);
-      if (state.frame >= 9 * STAGE_FRAMES && !secretRef.current) {
+      if (state.frame >= 9 * STAGE_FRAMES && !secretRef.current && state.frame >= 3540) {
         state.running = false;
         setGameStatus('over');
         return;
       }
-      if (state.frame >= 11 * STAGE_FRAMES && state.templeTimer === 0) {
+      if (state.frame >= 11 * STAGE_FRAMES && state.templeTimer === 0 && state.frame >= 3540) {
         state.running = false;
         setGameStatus('over');
         return;

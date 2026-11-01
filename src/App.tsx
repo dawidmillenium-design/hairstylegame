@@ -477,6 +477,14 @@ export default function App() {
     const update = () => {
       if (!state.running || statusRef.current !== 'playing') return;
       state.frame++;
+      if (state.frame % 600 === 0) {
+        const bars = Math.floor(state.tireCount / 5);
+        state.tireCount -= bars * 5;
+        state.score += bars * 200;
+        setTireCount(state.tireCount);
+        addPopup(350, 170, bars ? 'GOLD BARS +'+bars+' · COLOMBIA PARCEL' : 'COLLECT 5 TIRES FOR GOLD', '#ffe970');
+        playSound('super');
+      }
       const stageNumber = getStageIndex(state.frame);
       if (stageNumber !== getStageIndex(state.frame - 1)) setStageIndex(stageNumber);
       if (stageNumber >= 9 && !ghostMode) setGhostMode(true);
@@ -760,6 +768,35 @@ export default function App() {
       ctx.beginPath(); ctx.arc(wx, -r, r * 0.18, 0, 6.29); ctx.fill();
     };
 
+    const drawTruckStop = () => {
+      const american = Math.floor(state.frame / 600) % 2 === 1;
+      ctx.save();
+      ctx.fillStyle = '#090c23f0'; ctx.fillRect(65, 78, 670, 286);
+      ctx.strokeStyle = american ? '#6ee7ff' : '#ffd16e';
+      ctx.lineWidth = 4; ctx.strokeRect(65, 78, 670, 286);
+      ctx.textAlign = 'center';
+      ctx.font = 'bold 22px monospace';ctx.fillStyle = american ? '#6ee7ff' : '#ffd16e';
+      ctx.fillText(american ? 'USA · LONG-NOSE BIG RIG STOP' : 'INDIA · HIGHWAY DHABA TRUCK STOP',400,119);
+      ctx.font = '14px monospace';ctx.fillStyle = '#fff';
+      ctx.fillText(american ? 'CHROME EXHAUSTS · SLEEPER CAB · TRAILER' : 'COLORFUL LORRY · HORN OK PLEASE · DHABA',400,146);
+      ctx.fillStyle = american ? '#e94454' : '#ffb92b';
+      if(american) {
+        ctx.fillRect(300,215,115,67);ctx.fillRect(416,244,93,38);
+        ctx.fillStyle='#a4e6ff';ctx.fillRect(312,226,55,24);
+        ctx.fillStyle='#dce7ed';ctx.fillRect(377,194,7,50);ctx.fillRect(392,194,7,50);
+        ctx.fillStyle='#c9d2df';ctx.fillRect(118,206,177,76);
+      } else {
+        ctx.fillRect(340,210,130,72);ctx.fillRect(122,218,214,64);
+        ctx.fillStyle='#77e6f9';ctx.fillRect(353,222,83,26);
+        ctx.fillStyle='#f337a0';ctx.fillRect(124,209,208,11);
+        ctx.fillStyle='#71f0a6';ctx.fillRect(341,201,128,9);
+        ctx.fillStyle='#fff';ctx.font='bold 13px monospace';ctx.fillText('HORN OK PLEASE',225,253);
+      }
+      ctx.fillStyle='#181b28';[160,255,370,457].forEach(x=>{ctx.beginPath();ctx.arc(x,284,19,0,6.283);ctx.fill();});
+      ctx.fillStyle='#ffe978';ctx.font='bold 17px monospace';ctx.fillText('5 TIRES = 1 GOLD BAR · PLAYA BLANCA POST',400,329);
+      ctx.restore();
+    };
+
     const drawBgTruck = (t: BgTruck) => {
       ctx.save();
       ctx.translate(t.x, t.y);
@@ -776,6 +813,17 @@ export default function App() {
       ctx.fillStyle = 'rgba(0,0,0,0.12)';
       ctx.beginPath(); ctx.ellipse(-70, 2, 90, 4, 0, 0, 6.29); ctx.fill();
 
+      // Distinct American conventional cab or ornamented Indian lorry.
+      if (getStageIndex(state.frame) % 2 === 0) {
+        ctx.fillStyle=t.cab;ctx.fillRect(-35,-36,35,30);ctx.fillRect(0,-19,31,13);
+        ctx.fillStyle='#9ee8ff';ctx.fillRect(-30,-30,17,12);
+        ctx.fillStyle='#cbd8e3';ctx.fillRect(-25,-49,5,21);ctx.fillRect(-14,-49,5,21);
+      } else {
+        ctx.fillStyle=t.cab;ctx.fillRect(-29,-44,40,38);
+        ctx.fillStyle='#a5ecff';ctx.fillRect(-24,-36,28,15);
+        ctx.fillStyle='#fbd348';ctx.fillRect(-31,-47,44,5);
+        ctx.fillStyle='#ff52ae';ctx.fillRect(-30,-17,43,5);
+      }
       // Cab
       ctx.fillStyle = t.cab;
       ctx.beginPath();
@@ -1310,6 +1358,7 @@ export default function App() {
       }
 
       drawHUD();
+      if (state.frame > 0 && state.frame % 600 < 125) drawTruckStop();
       ctx.save();
       ctx.fillStyle = '#090b25dd'; ctx.fillRect(260, 52, 310, 27);
       ctx.fillStyle = '#ffeb78'; ctx.font = 'bold 15px monospace';

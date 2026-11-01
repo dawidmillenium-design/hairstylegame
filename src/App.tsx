@@ -23,6 +23,8 @@ export default function App() {
   const [combo, setCombo] = useState(0);
   const [soundEnabled, setSoundEnabled] = useState(true);
   const [stageIndex, setStageIndex] = useState(0);
+  const [souvenirs, setSouvenirs] = useState(0);
+  const [ghostMode, setGhostMode] = useState(false);
   const [secretUnlocked, setSecretUnlocked] = useState(false);
   const secretRef = useRef(false);
   useEffect(() => { secretRef.current = secretUnlocked; }, [secretUnlocked]);
@@ -241,6 +243,7 @@ export default function App() {
     interface Popup { x: number; y: number; txt: string; c: string; life: number; maxLife: number; }
     interface BgTruck { x: number; y: number; scale: number; factor: number; alpha: number; rot: number; type: string; cab: string; }
     interface Star { x: number; y: number; size: number; speed: number; }
+    interface Souvenir { x: number; y: number; type: number; bob: number; }
     interface PowerUp { x: number; y: number; type: 'shield' | 'magnet' | 'slow' | 'wineW' | 'wineB'; r: number; bob: number; }
 
     interface GameState {
@@ -252,6 +255,8 @@ export default function App() {
       bgTrucks: BgTruck[];
       stars: Star[];
       powerUps: PowerUp[];
+      souvenirs: Souvenir[];
+      souvenirCount: number;
       score: number;
       tireCount: number;
       speed: number;
@@ -292,6 +297,8 @@ export default function App() {
       bgTrucks: [],
       stars: [],
       powerUps: [],
+      souvenirs: [],
+      souvenirCount: 0,
       score: 0,
       tireCount: 0,
       speed: 5,
@@ -303,7 +310,7 @@ export default function App() {
       over: false,
       combo: 0,
       comboTimer: 0,
-      lives: 3,
+      lives: 999,
       shieldActive: false,
       shieldTimer: 0,
       magnetActive: false,
@@ -405,14 +412,17 @@ export default function App() {
 
     const startGame = () => {
       state = initState();
+      if (secretRef.current) state.frame = 9 * STAGE_FRAMES;
       state.player.w = heroW;
       state.player.y = GROUND - state.player.h;
       initBg();
       setGameStatus('playing');
       setScore(0);
-      setStageIndex(0);
+      setStageIndex(secretRef.current ? 9 : 0);
       setTireCount(0);
-      setLives(3);
+      setLives(999);
+      setSouvenirs(0);
+      setGhostMode(false);
       setCombo(0);
     };
 
@@ -469,6 +479,7 @@ export default function App() {
       state.frame++;
       const stageNumber = getStageIndex(state.frame);
       if (stageNumber !== getStageIndex(state.frame - 1)) setStageIndex(stageNumber);
+      if (stageNumber >= 9 && !ghostMode) setGhostMode(true);
       if (state.frame >= 9 * STAGE_FRAMES && !secretRef.current) {
         state.running = false;
         setGameStatus('over');
@@ -480,7 +491,24 @@ export default function App() {
         return;
       }
 
+      // Souvenir trail: maps, wine, USD, postcards and retro CD-ROMs.
+      if (state.frame % 45 === 10) state.souvenirs.push({ x: W + 25, y: GROUND - 70 - Math.random() * 110, type: Math.floor(Math.random() * 5), bob: Math.random() * 6.28 });
       const effectiveSpeed = state.slowActive ? state.speed * 0.5 : state.speed;
+      for (const item of state.souvenirs) {
+        item.x -= effectiveSpeed;
+        item.bob += .09;
+        if (Math.abs(item.x - (state.player.x + state.player.w / 2)) < 55 && Math.abs(item.y - (state.player.y + state.player.h / 2)) < 85) {
+          item.x = -100;
+          state.souvenirCount++;
+          state.score += 75 + state.combo * 10;
+          state.inv = Math.max(state.inv, 60);
+          addPopup(state.player.x + 45, state.player.y - 15, ['MAP +75','WINE +75','USD +75','POSTCARD +75','CD-ROM +75'][item.type], '#fdf68d');
+          addParticles(state.player.x + 50, state.player.y + 50, '#ffdd55', 12);
+          playSound('collect');
+          setSouvenirs(state.souvenirCount);
+        }
+      }
+      state.souvenirs = state.souvenirs.filter(item => item.x > -50);
       state.distanceTraveled += effectiveSpeed;
       state.score += effectiveSpeed * 0.12;
       state.speed = Math.min(5 + state.frame * 0.003, MAX_SPEED);
@@ -632,7 +660,11 @@ export default function App() {
             state.obstacles.splice(i, 1);
             playSound('hit');
           } else {
-            state.lives--;
+            // IMMORTAL ARCADE: obstacles create a spectacular bounce, not a death.
+            state.lives = 999;
+            state.player.vy = -12;
+            state.player.jump = true;
+            state.score += 10;
             state.inv = 90;
             state.combo = 0;
             state.comboTimer = 0;
@@ -640,7 +672,7 @@ export default function App() {
             playSound('hit');
             state.obstacles.splice(i, 1);
 
-            if (state.lives <= 0) {
+            if (false) {
               state.running = false;
               state.over = true;
               addParticles(state.player.x + state.player.w / 2, state.player.y + state.player.h / 2, '#ff3333', 40, 10);
@@ -1054,7 +1086,7 @@ export default function App() {
       }
 
       // Draw hero: gorilla (black wine) > real sprite > pixel fallback
-      if (state.gorillaActive && gorillaReady) {
+      if (gorillaReady) {
         const gh = ph * 1.3;
         const gw = gh * (gorillaImg.naturalWidth / gorillaImg.naturalHeight);
         ctx.save();
@@ -1216,10 +1248,11 @@ export default function App() {
       const stageGradient = ctx.createLinearGradient(0, 0, 0, GROUND);
       stageGradient.addColorStop(0, world.sky[0]);
       stageGradient.addColorStop(1, world.sky[1]);
-      ctx.globalAlpha = 0.72;
+      ctx.globalAlpha = getStageIndex(state.frame) >= 9 ? 0.45 : 0.72;
       ctx.fillStyle = stageGradient;
       ctx.fillRect(0, 0, W, GROUND);
       ctx.globalAlpha = 1;
+      if (getStageIndex(state.frame) >= 9) { ctx.fillStyle = '#b7e9ff44'; ctx.fillRect(0, 0, W, GROUND); }
       ctx.font = 'bold 22px sans-serif';
       ctx.textAlign = 'center';
       world.landmarks.forEach((mark, i) => ctx.fillText(mark, ((i * 290 + 130 - state.distanceTraveled * .07) % 1050 + 1050) % 1050 - 80, GROUND - 65 - i * 20));
@@ -1238,6 +1271,14 @@ export default function App() {
       drawMer();
       drawPing();
       state.powerUps.forEach(drawPowerUp);
+      state.souvenirs.forEach(item => {
+        ctx.save();
+        ctx.textAlign = 'center';
+        ctx.shadowColor = '#f0f'; ctx.shadowBlur = 18;
+        ctx.font = '35px sans-serif';
+        ctx.fillText(['🗺️','🍷','💵','💌','💿'][item.type], item.x, item.y + Math.sin(item.bob) * 8);
+        ctx.restore();
+      });
       state.tires.forEach(drawTire);
       state.obstacles.forEach(drawObstacle);
       drawHero();
@@ -1269,6 +1310,11 @@ export default function App() {
       }
 
       drawHUD();
+      ctx.save();
+      ctx.fillStyle = '#090b25dd'; ctx.fillRect(260, 52, 310, 27);
+      ctx.fillStyle = '#ffeb78'; ctx.font = 'bold 15px monospace';
+      ctx.textAlign = 'center'; ctx.fillText('✨ IMMORTAL · SOUVENIRS: ' + state.souvenirCount, 415, 71);
+      ctx.restore();
 
       // Pause overlay
       if (statusRef.current === 'paused') {
@@ -1398,8 +1444,9 @@ export default function App() {
         {/* Dedicated touch/keyboard-friendly action, separate from the canvas */}
         <div className="mt-4 flex justify-center"><button type="button" onClick={handleJumpButton} disabled={gameStatus !== 'playing'} className="arcade-button arcade-jump rounded-2xl px-10 py-3" aria-label="Jump over obstacles">⬆ JUMP!</button></div>
 
+        <div className="mt-3 text-center text-yellow-200 font-mono text-xs">🦍 IMMORTAL HERO · 🗺️ 🍷 💵 💌 💿 SOUVENIRS {souvenirs} · {ghostMode ? '👻 GHOST WORLD' : '⚡ WORLD TOUR'}</div>
         <div className="mt-3 text-center text-violet-200 font-mono text-xs sm:text-sm">🌍 STAGE {stageIndex + 1} / 11 · {STAGES[stageIndex].city} · {STAGES[stageIndex].place} · 5 seconds per stage</div>
-        {gameStatus === 'over' && !secretUnlocked && stageIndex >= 8 && <div className="mt-3 text-center"><button className="arcade-button rounded-xl bg-fuchsia-500 text-white px-5 py-3 font-bold" onClick={() => { setSecretUnlocked(true); secretRef.current = true; handleStart(); }}>🔓 UNLOCK SECRET WORLD TOUR: BOSTON + MEXICO BORDER</button></div>}
+        {gameStatus === 'over' && !secretUnlocked && stageIndex >= 8 && <div className="mt-3 text-center"><button className="arcade-button rounded-xl bg-fuchsia-500 text-white px-5 py-3 font-bold" onClick={() => { setSecretUnlocked(true); secretRef.current = true; handleStart(); }}>👻 ENTER GHOST WORLDS: BOSTON + TEXAS–MEXICO BORDER</button></div>}
         {/* Controls */}
         <div className="arcade-controls mt-5 flex flex-wrap justify-center items-center gap-3">
           <button

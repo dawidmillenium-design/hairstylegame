@@ -593,6 +593,9 @@ export default function App() {
     const update = () => {
       if (!state.running || statusRef.current !== 'playing' || noticeRef.current) return;
       state.frame++;
+      const stageNumber = getStageIndex(state.frame);
+      if (stageNumber !== getStageIndex(state.frame - 1)) setStageIndex(stageNumber);
+      if (stageNumber >= 9 && !ghostMode) setGhostMode(true);
       if (state.frame % 600 === 0) {
         const bars = Math.floor(state.tireCount / 5);
         state.tireCount -= bars * 5;
@@ -613,9 +616,6 @@ export default function App() {
       }
       if (state.frame % 18 === 0) playMusicNote(Math.floor(state.frame / 18));
       if (state.frame % 750 === 0) speak(DJ_SHOUTS[Math.floor(state.frame / 750) % DJ_SHOUTS.length]);
-      const stageNumber = getStageIndex(state.frame);
-      if (stageNumber !== getStageIndex(state.frame - 1)) setStageIndex(stageNumber);
-      if (stageNumber >= 9 && !ghostMode) setGhostMode(true);
       if (state.frame >= 9 * STAGE_FRAMES && !secretRef.current) {
         finishRun();
         return;

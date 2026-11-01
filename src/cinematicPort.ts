@@ -108,16 +108,18 @@ function ship(c:CanvasRenderingContext2D,x:number,y:number,s:number){
   glowDot(c,218,-11,3,'#5efff2');
   c.restore();
 }
-function tire(c:CanvasRenderingContext2D,x:number,y:number,r:number){
+function tire(c:CanvasRenderingContext2D,x:number,y:number,r:number,spin=0){
   c.save();c.translate(x,y);
   c.fillStyle='#090d19';c.beginPath();c.ellipse(0,0,r,r*1.13,0,0,TAU);c.fill();
   c.strokeStyle='#7783a7';c.lineWidth=3;c.beginPath();c.arc(0,0,r*.57,0,TAU);c.stroke();
   c.strokeStyle='#353d51';c.lineWidth=2;c.beginPath();c.arc(0,0,r*.79,0,TAU);c.stroke();
-  for(let i=0;i<7;i++){const a=i*TAU/7;fill(c,'#b7c9db',Math.cos(a)*r*.43-2,Math.sin(a)*r*.43-2,4,4);}
+  for(let i=0;i<7;i++){const a=i*TAU/7+spin;fill(c,'#b7c9db',Math.cos(a)*r*.43-2,Math.sin(a)*r*.43-2,4,4);}
+  c.strokeStyle='#eff4ff88'; c.lineWidth=1.2;
+  for(let i=0;i<4;i++){const a=i*TAU/4+spin;c.beginPath();c.moveTo(Math.cos(a)*r*.18,Math.sin(a)*r*.18);c.lineTo(Math.cos(a)*r*.57,Math.sin(a)*r*.57);c.stroke();}
   c.restore();
 }
 function truck(c:CanvasRenderingContext2D,x:number,y:number,s:number,indian:boolean,frame:number){
-  c.save();c.translate(x,y);c.scale(s,s);
+  c.save();c.translate(x,y+Math.sin(frame*.11+x*.03)*.7);c.scale(s,s);
   // Trailer
   fill(c,'#050b1a',-165,-66,149,62);
   fill(c,indian?'#c16b18':'#384f79',-163,-64,146,55);
@@ -144,9 +146,22 @@ function truck(c:CanvasRenderingContext2D,x:number,y:number,s:number,indian:bool
     fill(c,'#afbacb',-11,-89,5,27);fill(c,'#afbacb',0,-89,5,27);
     fill(c,'#e1e9f4',46,-30,6,21);
   }
-  tire(c,-140,-2,13);tire(c,-104,-2,13);tire(c,-27,-2,14);tire(c,indian?15:28,-2,14);
+  const wheelSpin = frame * (indian ? -.27 : -.34) + x*.04;
+  tire(c,-140,-2,13,wheelSpin);tire(c,-104,-2,13,wheelSpin);tire(c,-27,-2,14,wheelSpin);tire(c,indian?15:28,-2,14,wheelSpin);
+  // A physically separate low-energy neon underglow layer (not an expensive full-frame blur).
+  const underglow=c.createLinearGradient(-70,-3,60,-3);
+  underglow.addColorStop(0,'#ff50a000');underglow.addColorStop(.45,indian?'#fcaf3d4b':'#6feaff50');underglow.addColorStop(1,'#ff50a000');
+  c.fillStyle=underglow;c.fillRect(-160,5,225,5);
   fill(c,'#ffe3bd',indian?25:49,-27,4,6);
-  glowDot(c,indian?29:51,-24,1.5,'#fff6d5');
+  glowDot(c,indian?29:51,-24,1.8,'#fff6d5');
+  c.save();
+  c.globalCompositeOperation='screen';
+  const originX=indian?29:51;
+  const beam=c.createLinearGradient(originX,-25,originX+95,-23);
+  beam.addColorStop(0,'#fff7cd66');beam.addColorStop(.45,'#84ddff16');beam.addColorStop(1,'#84ddff00');
+  c.fillStyle=beam;
+  c.beginPath();c.moveTo(originX,-29);c.lineTo(originX+95,-48);c.lineTo(originX+95,8);c.lineTo(originX,-17);c.closePath();c.fill();
+  c.restore();
   c.restore();
 }
 function rain(c:CanvasRenderingContext2D,frame:number,travel:number){
@@ -182,6 +197,63 @@ function road(c:CanvasRenderingContext2D,travel:number,ground:number){
     fill(c,'#56d1f277',x+24,ground+8,25,2);
   }
 }
+
+/**
+ * Reflect moving truck lights against the wet foreground. These reflections use
+ * the same movement parameters as the trucks and only render in the road band.
+ * A handful of screen-blended gradients avoids an expensive postprocess pass.
+ */
+function movingTruckReflections(c:CanvasRenderingContext2D,travel:number,ground:number,frame:number){
+  c.save();
+  c.beginPath();c.rect(0,ground+6,W,H-ground-6);c.clip();
+  c.globalCompositeOperation='screen';
+  for(let lane=0;lane<2;lane++){
+    const count=lane===0?4:3;
+    for(let i=0;i<count;i++){
+      const indian=(i+lane)%2===1;
+      const velocity=lane===0?.3:.49;
+      const x=wrap(i*(lane===0?242:303)+100-travel*velocity,1190)-170;
+      const intensity= .53 + .22*Math.sin(frame*.07+i);
+      const center=x+34;
+      const length=lane===0?53:75;
+      const beam=c.createLinearGradient(center-28,ground,center+42,ground+length);
+      beam.addColorStop(0,indian?'#ffb85588':'#79d9ff88');
+      beam.addColorStop(.22,indian?'#ef9c6160':'#65cfff56');
+      beam.addColorStop(1,'#ec59f700');
+      c.globalAlpha=intensity;
+      c.fillStyle=beam;
+      c.beginPath();
+      c.moveTo(center-20,ground+1);
+      c.lineTo(center+21,ground+1);
+      c.lineTo(center+57,ground+length);
+      c.lineTo(center-36,ground+length);
+      c.closePath();c.fill();
+      // Broken mirror streaks retain a pixel-world character while moving smoothly.
+      for(let j=0;j<6;j++){
+        const xx=center-25+hash(j+i*11+lane*75)*63;
+        const yy=ground+9+j*7;
+        fill(c,indian?'#ffd48670':'#83dfff69',xx,yy,8+(j%3)*4,1.5);
+      }
+    }
+  }
+  c.restore();
+}
+
+function waterHighlights(c:CanvasRenderingContext2D,frame:number,travel:number,ground:number){
+  c.save();c.globalCompositeOperation='screen';
+  const band=c.createLinearGradient(0,ground+1,0,H);
+  band.addColorStop(0,'#d8e8ff15');band.addColorStop(.35,'#df65a51a');band.addColorStop(1,'#092e5b00');
+  c.fillStyle=band;c.fillRect(0,ground,W,H-ground);
+  for(let i=0;i<68;i++){
+    const x=wrap(hash(i+552)*W-travel*.23,W);
+    const y=ground+5+hash(i+761)*(H-ground-8);
+    const flicker=.55+Math.sin(frame*.045+i*5)*.25;
+    c.globalAlpha=flicker;
+    fill(c,i%3===0?'#fa91b577':'#80d9fc73',x,y,8+hash(i+811)*31,i%8===0?2:1);
+  }
+  c.restore();
+}
+
 export function drawCinematicPort(c:CanvasRenderingContext2D,p:PortScene){
   const {frame,travel,ground,city:stage,ghost}=p;
   const grad=c.createLinearGradient(0,0,0,ground);
@@ -220,11 +292,19 @@ export function drawCinematicPort(c:CanvasRenderingContext2D,p:PortScene){
     glowDot(c,x+1,294,2, i%2?'#ff67ad':'#ffeaaa');
   }
   // The two permitted vehicle archetypes alternate continuously: USA and INDIA.
+  // Two independent parallax lanes, exclusively American and Indian trucks.
+  // Both use subpixel positioning, animated wheels and changing headlight pools.
   for(let i=0;i<4;i++){
-    const x=wrap(i*242+100-travel*.3,1140)-170;
-    truck(c,x,356,i%2? .54:.61,i%2===1,frame);
+    const x=wrap(i*242+100-travel*.3,1190)-170;
+    truck(c,x,ground-23,i%2?.64:.7,i%2===1,frame);
+  }
+  for(let i=0;i<3;i++){
+    const x=wrap(i*303+100-travel*.49,1190)-170;
+    truck(c,x,ground-6,i%2?.79:.82,i%2===0,frame);
   }
   road(c,travel,ground);
+  waterHighlights(c,frame,travel,ground);
+  movingTruckReflections(c,travel,ground,frame);
   // Raised foreground containers and physical jumping platforms
   for(let i=0;i<8;i++){
     const x=wrap(i*208+88-travel*.8,1690)-205;

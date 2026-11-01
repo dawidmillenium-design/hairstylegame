@@ -1,4 +1,5 @@
 import { useEffect, useRef, useState } from 'react';
+import './arcade.css';
 import { HERO_BODY_URL, HERO_PORTRAIT_URL } from './assets/hero';
 import { GORILLA_URL, MERHUJUS_URL, MRPING_URL } from './assets/extra';
 
@@ -12,7 +13,7 @@ import { GORILLA_URL, MERHUJUS_URL, MRPING_URL } from './assets/extra';
 
 export default function App() {
   const canvasRef = useRef<HTMLCanvasElement>(null);
-  const engineRef = useRef<{ start: () => void } | null>(null);
+  const engineRef = useRef<{ start: () => void; jump: () => void } | null>(null);
   const [gameStatus, setGameStatus] = useState<'menu' | 'playing' | 'paused' | 'over'>('menu');
   const [score, setScore] = useState(0);
   const [highScore, setHighScore] = useState(0);
@@ -429,7 +430,7 @@ export default function App() {
           handleJump();
         }
       }
-      if (e.code === 'KeyP') {
+      if (e.code === 'KeyP' || e.code === 'Escape') {
         if (statusRef.current === 'playing') setGameStatus('paused');
         else if (statusRef.current === 'paused') setGameStatus('playing');
       }
@@ -1251,7 +1252,7 @@ export default function App() {
       rafId = requestAnimationFrame(loop);
     };
 
-    engineRef.current = { start: startGame };
+    engineRef.current = { start: startGame, jump: handleJump };
 
     initBg();
     loop();
@@ -1270,43 +1271,46 @@ export default function App() {
   const handleStart = () => {
     engineRef.current?.start();
   };
+  const handleJumpButton = () => engineRef.current?.jump();
+  const togglePause = () => setGameStatus(current => current === 'playing' ? 'paused' : current === 'paused' ? 'playing' : current);
 
   return (
-    <div className="min-h-screen bg-gray-900 flex flex-col items-center justify-center p-4">
-      <div className="w-full max-w-[840px]">
+    <div className="arcade-shell flex flex-col items-center justify-center p-3 sm:p-6">
+      <main className="relative w-full max-w-[920px]">
         {/* Header */}
-        <div className="text-center mb-4">
-          <h1 className="text-xl md:text-2xl font-bold text-green-400 tracking-wider font-mono">
+        <div className="text-center mb-5">
+          <div className="mb-3 flex flex-wrap justify-center gap-2"><span className="arcade-tag">🎮 NEON ARCADE</span><span className="arcade-tag">⚡ ONE-TAP RUNNER</span><span className="arcade-tag">🏆 BEST {highScore.toLocaleString()}</span></div>
+          <h1 className="arcade-title text-2xl md:text-4xl font-black text-green-300 font-mono">
             BLACKHUJUS the GREEN HAIR STYLE
           </h1>
-          <p className="text-gray-400 text-sm mt-1 font-mono">
+          <p className="text-violet-200 text-sm mt-2 font-mono">
             Blackhujus collects black truck tires on the interstate. Gotta go fast-ish.
           </p>
         </div>
 
         {/* Game Container */}
-        <div className="relative bg-black border-2 border-green-400 rounded-xl p-2 shadow-lg shadow-green-400/20">
+        <div className="arcade-panel relative bg-black border-2 border-green-400 rounded-2xl p-2 sm:p-3">
           <canvas
             ref={canvasRef}
             width={800}
             height={450}
-            className="w-full rounded-lg cursor-pointer block"
+            className="w-full rounded-xl cursor-pointer block"
             style={{ imageRendering: 'pixelated', touchAction: 'manipulation' }}
           />
 
           {/* Menu Overlay */}
           {gameStatus === 'menu' && (
-            <div className="absolute inset-0 flex flex-col items-center justify-center bg-black/70 rounded-xl">
-              <div className="text-center px-4">
+            <div className="arcade-overlay absolute inset-0 flex flex-col items-center justify-center bg-black/80 rounded-xl py-3">
+              <div className="text-center px-3 sm:px-4">
                 <img
                   src={HERO_PORTRAIT_URL}
                   alt="Blackhujus - the hero"
-                  className="w-28 md:w-36 mx-auto mb-3 drop-shadow-[0_0_25px_rgba(74,222,128,0.35)]"
+                  className="w-16 sm:w-24 md:w-28 mx-auto mb-1 sm:mb-3 drop-shadow-[0_0_25px_rgba(74,222,128,0.35)]"
                 />
                 <h2 className="text-2xl md:text-3xl font-bold text-green-400 font-mono mb-1">BLACKHUJUS</h2>
                 <p className="text-green-300 text-lg font-mono mb-1">the GREEN HAIR STYLE</p>
-                <p className="text-yellow-300 text-base font-mono mb-4">v8.0 - Wine & Gorilla Edition</p>
-                <div className="space-y-1.5 mb-6">
+                <p className="text-yellow-300 text-xs sm:text-base font-mono mb-1 sm:mb-3">v8.0 - Wine & Gorilla Edition</p>
+                <div className="arcade-menu-text space-y-1 mb-2 sm:mb-4">
                   <p className="text-gray-300 text-sm font-mono">🏃 Collect tires, avoid obstacles</p>
                   <p className="text-gray-300 text-sm font-mono">⭐ Grab golden tires for invincibility</p>
                   <p className="text-gray-300 text-sm font-mono">🛡🧲⏱ Power-ups: Shield, Magnet, Slow-mo</p>
@@ -1316,21 +1320,21 @@ export default function App() {
                 </div>
                 <button
                   onClick={handleStart}
-                  className="px-8 py-3 bg-green-500 hover:bg-green-400 text-black font-bold font-mono rounded-lg text-lg transition-all transform hover:scale-105 shadow-lg"
+                  className="arcade-button px-8 py-2 sm:py-3 bg-lime-400 hover:bg-lime-300 text-black font-black font-mono rounded-xl text-lg"
                 >
                   ▶ START GAME
                 </button>
-                <p className="text-gray-500 text-xs mt-4 font-mono">SPACE / UP / TAP to jump • P to pause</p>
+                <p className="text-gray-300 text-xs mt-2 font-mono">SPACE / ↑ / TAP = jump • P / ESC = pause</p>
               </div>
             </div>
           )}
 
           {/* Game Over Overlay */}
           {gameStatus === 'over' && (
-            <div className="absolute inset-0 flex flex-col items-center justify-center bg-black/80 rounded-xl">
+            <div className="arcade-overlay absolute inset-0 flex flex-col items-center justify-center bg-black/85 rounded-xl py-3 px-4">
               <div className="text-center">
-                <h2 className="text-4xl font-bold text-red-500 font-mono mb-4">GAME OVER</h2>
-                <div className="bg-gray-800/80 rounded-lg p-4 mb-6 border border-gray-600">
+                <h2 className="text-2xl sm:text-4xl font-black text-pink-400 font-mono mb-2">GAME OVER</h2>
+                <div className="bg-gray-800/80 rounded-xl p-3 sm:p-4 mb-3 sm:mb-5 border border-violet-400/60">
                   <p className="text-yellow-300 text-xl font-mono">Score: {score}</p>
                   <p className="text-gray-300 font-mono mt-1">Tires: {tireCount}</p>
                   <p className="text-gray-300 font-mono mt-1">Best Combo: x{combo}</p>
@@ -1341,7 +1345,7 @@ export default function App() {
                 </div>
                 <button
                   onClick={handleStart}
-                  className="px-8 py-3 bg-green-500 hover:bg-green-400 text-black font-bold font-mono rounded-lg text-lg transition-all transform hover:scale-105 shadow-lg"
+                  className="arcade-button px-8 py-3 bg-lime-400 hover:bg-lime-300 text-black font-black font-mono rounded-xl text-lg"
                 >
                   ▶ PLAY AGAIN
                 </button>
@@ -1351,11 +1355,15 @@ export default function App() {
           )}
         </div>
 
+        {/* Dedicated touch/keyboard-friendly action, separate from the canvas */}
+        <div className="mt-4 flex justify-center"><button type="button" onClick={handleJumpButton} disabled={gameStatus !== 'playing'} className="arcade-button arcade-jump rounded-2xl px-10 py-3" aria-label="Jump over obstacles">⬆ JUMP!</button></div>
+
         {/* Controls */}
-        <div className="mt-4 flex flex-wrap justify-center gap-4">
+        <div className="arcade-controls mt-5 flex flex-wrap justify-center items-center gap-3">
           <button
-            onClick={() => setSoundEnabled(!soundEnabled)}
-            className={`px-4 py-2 rounded-lg font-mono text-sm transition-all ${
+            onClick={() => setSoundEnabled(value => !value)}
+            aria-pressed={soundEnabled}
+            className={`arcade-button px-4 py-3 rounded-xl font-mono text-sm font-bold ${
               soundEnabled
                 ? 'bg-green-600 text-white hover:bg-green-500'
                 : 'bg-gray-700 text-gray-400 hover:bg-gray-600'
@@ -1364,32 +1372,32 @@ export default function App() {
             {soundEnabled ? '🔊 Sound ON' : '🔇 Sound OFF'}
           </button>
           <button
-            onClick={() => {
-              if (gameStatus === 'playing') setGameStatus('paused');
-              else if (gameStatus === 'paused') setGameStatus('playing');
-            }}
-            className="px-4 py-2 bg-yellow-600 text-white rounded-lg font-mono text-sm hover:bg-yellow-500 transition-all"
+            onClick={togglePause}
+            disabled={gameStatus === 'menu' || gameStatus === 'over'}
+            className="arcade-button px-4 py-3 bg-yellow-500 text-black rounded-xl font-mono text-sm font-bold hover:bg-yellow-400"
           >
             {gameStatus === 'paused' ? '▶ Resume' : '⏸ Pause'}
           </button>
           <button
             onClick={handleStart}
-            className="px-4 py-2 bg-blue-600 text-white rounded-lg font-mono text-sm hover:bg-blue-500 transition-all"
+            className="arcade-button px-4 py-3 bg-violet-600 text-white rounded-xl font-mono text-sm font-bold hover:bg-violet-500"
           >
             🔄 Restart
           </button>
         </div>
 
+        <div aria-live="polite" className="mt-3 text-center text-sm text-lime-200 font-mono">{gameStatus === 'playing' ? '⚡ RUNNING — collect tires and keep your combo alive!' : gameStatus === 'paused' ? '⏸ PAUSED — resume when ready.' : gameStatus === 'over' ? '🏁 RUN COMPLETE — chase your next record!' : '✨ READY? Your neon adventure starts here.'}</div>
+
         {/* Instructions */}
-        <div className="mt-4 text-center">
+        <div className="arcade-tip mt-4 text-center">
           <p className="text-gray-500 text-xs font-mono">
-            SPACE / UP / TAP = jump • P = pause • avoid cones, potholes & barriers • golden SUPER TIRE = invincible
+            SPACE / ↑ / TAP / JUMP button = jump • P / ESC = pause • avoid cones, potholes & barriers • golden SUPER TIRE = invincible
           </p>
           <p className="text-gray-600 text-xs font-mono mt-1">
             Collect tires in sequence for combo multiplier • 🛡 Shield • 🧲 Magnet • ⏱ Slow-mo • 🍷 White wine = wings • 🍇 Black wine = gorilla
           </p>
         </div>
-      </div>
+      </main>
     </div>
   );
 }

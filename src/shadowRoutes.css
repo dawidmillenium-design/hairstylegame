@@ -69,3 +69,7 @@
 @media(max-width:850px){.rpg-shell{height:min(98dvh,1100px)}.rpg-main{grid-template-columns:1fr;overflow-y:auto}.rpg-side,.rpg-content{overflow:visible}.rpg-side{order:2}.rpg-route-groups,.rpg-quest-grid{grid-template-columns:1fr}.rpg-crew-grid{grid-template-columns:repeat(2,1fr)}.rpg-header{padding:9px}.rpg-nav{padding:7px}.rpg-nav button{font-size:10px;padding:9px 7px}}
 @media(max-width:450px){.rpg-map-label{flex-direction:column;padding:8px}.rpg-art-grid{grid-template-columns:repeat(2,minmax(0,1fr))}.rpg-header{align-items:flex-start}.rpg-brand-icon{display:none}.rpg-close{padding:8px;font-size:10px}.rpg-footer{font-size:9px}}
 @media(prefers-reduced-motion:reduce){.rpg-overlay *{transition:none!important;animation:none!important}}
+
+.rpg-portrait{overflow:hidden;display:grid;place-items:center;position:relative}
+.rpg-portrait img{max-width:100%;max-height:100%;object-fit:contain;position:absolute;inset:0;margin:auto;filter:drop-shadow(0 1px 12px #17011eee);transition:transform .18s ease}
+.rpg-crew-card:hover .rpg-portrait img{transform:scale(1.1)}

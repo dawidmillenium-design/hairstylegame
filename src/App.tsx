@@ -1442,7 +1442,7 @@ export default function App() {
         ctx.save();
         ctx.globalAlpha = getStageIndex(state.frame) >= 9 ? 0.48 : 0.72;
         ctx.imageSmoothingEnabled = false;
-        ctx.drawImage(artAtlas, (tile % 4) * 160, Math.floor(tile / 4) * 90, 160, 90, 0, 48, W, GROUND - 48);
+        ctx.drawImage(artAtlas, (tile % 4) * 96, Math.floor(tile / 4) * 54, 96, 54, 0, 48, W, GROUND - 48);
         ctx.restore();
       }
       if (getStageIndex(state.frame) >= 9) { ctx.fillStyle = '#b7e9ff44'; ctx.fillRect(0, 0, W, GROUND); }

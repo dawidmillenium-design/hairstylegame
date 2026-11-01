@@ -489,6 +489,10 @@ export default function App() {
     const startGame = () => {
       state = initState();
       statusRef.current = 'playing';
+      if (soundRef.current) {
+        const ac = getAudioCtx();
+        if (ac?.state === 'suspended') void ac.resume().catch(() => {});
+      }
       const isBonus = secretRef.current;
       setGoldBars(0);
       setNotice(null);

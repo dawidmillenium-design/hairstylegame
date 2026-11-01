@@ -1,8 +1,20 @@
 import { useEffect, useRef, useState } from 'react';
 import './arcade.css';
+import './cutscene.css';
 import { STAGES, STAGE_FRAMES, getStageIndex } from './stages';
 import { HERO_BODY_URL, HERO_PORTRAIT_URL } from './assets/hero';
 import { GORILLA_URL, MERHUJUS_URL, MRPING_URL } from './assets/extra';
+import { TRUCKER_PIXEL_URL } from './assets/truckerPixel';
+
+type GameNotice = { kind: 'call' | 'truckstop'; title: string; message: string; detail?: string };
+const TRUCKER_GREETING = 'Hello Blackhujus. Good luck with black truck tires. I wait for you in secret ocean containers.';
+const DJ_SHOUTS = [
+  'Go, go, go! From Mexico to Tokyo!',
+  'Faster, funky gorilla! Keep collecting those tires!',
+  'Black tires, golden bars. Go, Blackhujus, go!',
+  'Turbo time! Dance with the highway!',
+  'Your adventure is worldwide. Keep on rolling!'
+];
 
 // ============================================
 // BLACKHUJUS the GREEN HAIR STYLE v8.0
@@ -14,14 +26,18 @@ import { GORILLA_URL, MERHUJUS_URL, MRPING_URL } from './assets/extra';
 
 export default function App() {
   const canvasRef = useRef<HTMLCanvasElement>(null);
-  const engineRef = useRef<{ start: () => void; jump: () => void } | null>(null);
+  const engineRef = useRef<{ start: () => void; jump: () => void; dismissNotice: () => void } | null>(null);
   const [gameStatus, setGameStatus] = useState<'menu' | 'playing' | 'paused' | 'over'>('menu');
   const [score, setScore] = useState(0);
   const [highScore, setHighScore] = useState(0);
   const [tireCount, setTireCount] = useState(0);
-  const [lives, setLives] = useState(3);
+  const [lives, setLives] = useState(10);
   const [combo, setCombo] = useState(0);
   const [soundEnabled, setSoundEnabled] = useState(true);
+  const [voiceEnabled, setVoiceEnabled] = useState(true);
+  const [notice, setNotice] = useState<GameNotice | null>(null);
+  const noticeRef = useRef<GameNotice | null>(null);
+  const [goldBars, setGoldBars] = useState(0);
   const [stageIndex, setStageIndex] = useState(0);
   const [souvenirs, setSouvenirs] = useState(0);
   const [ghostMode, setGhostMode] = useState(false);
@@ -32,9 +48,17 @@ export default function App() {
   // Refs so the (single-mount) game engine always reads fresh values
   const statusRef = useRef(gameStatus);
   const soundRef = useRef(soundEnabled);
+  const voiceRef = useRef(voiceEnabled);
   const highRef = useRef(highScore);
   useEffect(() => { statusRef.current = gameStatus; }, [gameStatus]);
-  useEffect(() => { soundRef.current = soundEnabled; }, [soundEnabled]);
+  useEffect(() => {
+    soundRef.current = soundEnabled;
+    if (!soundEnabled && typeof window !== 'undefined' && 'speechSynthesis' in window) window.speechSynthesis.cancel();
+  }, [soundEnabled]);
+  useEffect(() => {
+    voiceRef.current = voiceEnabled;
+    if (!voiceEnabled && typeof window !== 'undefined' && 'speechSynthesis' in window) window.speechSynthesis.cancel();
+  }, [voiceEnabled]);
   useEffect(() => { highRef.current = highScore; }, [highScore]);
 
   useEffect(() => {
@@ -55,7 +79,16 @@ export default function App() {
     const resize = () => {
       const container = canvas.parentElement;
       if (container) {
-        const w = Math.min(800, container.clientWidth - 20);
+        // Internal backing store follows device pixel ratio, capped for GPU/memory safety.
+        const dpr = Math.max(1, Math.min(2, window.devicePixelRatio || 1));
+        const physicalW = Math.round(800 * dpr);
+        const physicalH = Math.round(450 * dpr);
+        if (canvas.width !== physicalW || canvas.height !== physicalH) {
+          canvas.width = physicalW;
+          canvas.height = physicalH;
+        }
+        ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
+        const w = Math.max(1, Math.min(800, container.clientWidth - 20));
         const ratio = 800 / 450;
         canvas.style.width = w + 'px';
         canvas.style.height = (w / ratio) + 'px';
@@ -147,6 +180,47 @@ export default function App() {
           osc.start(ac.currentTime);
           osc.stop(ac.currentTime + 0.24);
           break;
+      }
+    };
+
+    // Original, lightweight synthwave pulse: music follows game state and pauses with notices.
+    const MUSIC_NOTES = [196, 247, 294, 392, 294, 247, 220, 330];
+    const playMusicNote = (step: number) => {
+      if (!soundRef.current) return;
+      const ac = getAudioCtx();
+      if (!ac || ac.state !== 'running') return;
+      const tone = ac.createOscillator();
+      const volume = ac.createGain();
+      tone.type = step % 4 ? 'triangle' : 'square';
+      tone.frequency.setValueAtTime(MUSIC_NOTES[step % MUSIC_NOTES.length], ac.currentTime);
+      volume.gain.setValueAtTime(0.0001, ac.currentTime);
+      volume.gain.exponentialRampToValueAtTime(0.025, ac.currentTime + 0.012);
+      volume.gain.exponentialRampToValueAtTime(0.0001, ac.currentTime + 0.16);
+      tone.connect(volume); volume.connect(ac.destination);
+      tone.start(ac.currentTime); tone.stop(ac.currentTime + 0.17);
+    };
+    const speak = (line: string) => {
+      if (!soundRef.current || !voiceRef.current || !('speechSynthesis' in window) || !('SpeechSynthesisUtterance' in window)) return;
+      try {
+        window.speechSynthesis.cancel();
+        const utterance = new SpeechSynthesisUtterance(line);
+        utterance.lang = 'en-US';
+        utterance.rate = 1.05;
+        utterance.pitch = 1.13;
+        utterance.volume = 0.85;
+        window.speechSynthesis.speak(utterance);
+      } catch { /* TTS is optional and not supported in every browser */ }
+    };
+    const showNotice = (next: GameNotice) => {
+      noticeRef.current = next; // Immediate block: do not wait for a React render.
+      setNotice(next);
+    };
+    const dismissNotice = () => {
+      noticeRef.current = null;
+      setNotice(null);
+      if (statusRef.current === 'playing') {
+        const ac = getAudioCtx();
+        if (soundRef.current && ac?.state === 'suspended') void ac.resume().catch(() => {});
       }
     };
 
@@ -257,6 +331,7 @@ export default function App() {
       powerUps: PowerUp[];
       souvenirs: Souvenir[];
       souvenirCount: number;
+      goldBars: number;
       score: number;
       tireCount: number;
       speed: number;
@@ -299,6 +374,7 @@ export default function App() {
       powerUps: [],
       souvenirs: [],
       souvenirCount: 0,
+      goldBars: 0,
       score: 0,
       tireCount: 0,
       speed: 5,
@@ -310,7 +386,7 @@ export default function App() {
       over: false,
       combo: 0,
       comboTimer: 0,
-      lives: 999,
+      lives: 10,
       shieldActive: false,
       shieldTimer: 0,
       magnetActive: false,
@@ -412,6 +488,15 @@ export default function App() {
 
     const startGame = () => {
       state = initState();
+      statusRef.current = 'playing';
+      if (soundRef.current) {
+        const ac = getAudioCtx();
+        if (ac?.state === 'suspended') void ac.resume().catch(() => {});
+      }
+      const isBonus = secretRef.current;
+      setGoldBars(0);
+      setNotice(null);
+      noticeRef.current = null;
       if (secretRef.current) state.frame = 9 * STAGE_FRAMES;
       state.player.w = heroW;
       state.player.y = GROUND - state.player.h;
@@ -420,7 +505,13 @@ export default function App() {
       setScore(0);
       setStageIndex(secretRef.current ? 9 : 0);
       setTireCount(0);
-      setLives(999);
+      setLives(10);
+      if (!isBonus) {
+        showNotice({ kind: 'call', title: '📞 INCOMING CALL · EUROPEAN TRUCK PARKING', message: TRUCKER_GREETING, detail: 'Your trucker contact is waiting near the secret ocean containers.' });
+        speak(TRUCKER_GREETING);
+      } else {
+        speak('Secret levels unlocked! Welcome to Boston and the Texas Mexico border!');
+      }
       setSouvenirs(0);
       setGhostMode(false);
       setCombo(0);
@@ -428,7 +519,7 @@ export default function App() {
 
     // Input handling
     const handleJump = () => {
-      if (statusRef.current !== 'playing') return;
+      if (statusRef.current !== 'playing' || noticeRef.current) return;
       if (!state.player.jump) {
         state.player.vy = state.wingActive ? JUMP_FORCE * 1.35 : JUMP_FORCE;
         state.player.jump = true;
@@ -438,6 +529,11 @@ export default function App() {
     };
 
     const handleKeyDown = (e: KeyboardEvent) => {
+      if (noticeRef.current && (e.code === 'Space' || e.code === 'Enter' || e.code === 'Escape')) {
+        e.preventDefault();
+        dismissNotice();
+        return;
+      }
       if (e.code === 'Space' || e.code === 'ArrowUp') {
         e.preventDefault();
         if (statusRef.current === 'menu' || statusRef.current === 'over') {
@@ -454,6 +550,7 @@ export default function App() {
 
     const handleTouch = (e: TouchEvent) => {
       e.preventDefault();
+      if (noticeRef.current) { dismissNotice(); return; }
       if (statusRef.current === 'menu' || statusRef.current === 'over') {
         startGame();
       } else if (statusRef.current === 'playing') {
@@ -462,6 +559,7 @@ export default function App() {
     };
 
     const handleClick = () => {
+      if (noticeRef.current) { dismissNotice(); return; }
       if (statusRef.current === 'menu' || statusRef.current === 'over') {
         startGame();
       } else if (statusRef.current === 'playing') {
@@ -473,29 +571,57 @@ export default function App() {
     canvas.addEventListener('mousedown', handleClick);
     window.addEventListener('keydown', handleKeyDown);
 
+    const finishRun = () => {
+      if (!state.running) return;
+      state.running = false;
+      state.over = true;
+      const finalScore = Math.floor(state.score);
+      setScore(finalScore);
+      setTireCount(state.tireCount);
+      setLives(state.lives);
+      setCombo(state.maxCombo);
+      setGameStatus('over');
+      statusRef.current = 'over';
+      if (finalScore > highRef.current) {
+        highRef.current = finalScore;
+        setHighScore(finalScore);
+        try { localStorage.setItem('sth_hi_v7', String(finalScore)); } catch { /* storage optional */ }
+      }
+    };
+
     // ---- UPDATE ----
     const update = () => {
-      if (!state.running || statusRef.current !== 'playing') return;
+      if (!state.running || statusRef.current !== 'playing' || noticeRef.current) return;
       state.frame++;
-      if (state.frame % 600 === 0) {
-        const bars = Math.floor(state.tireCount / 5);
-        state.tireCount -= bars * 5;
-        state.score += bars * 200;
-        setTireCount(state.tireCount);
-        addPopup(350, 170, bars ? 'GOLD BARS +'+bars+' · COLOMBIA PARCEL' : 'COLLECT 5 TIRES FOR GOLD', '#ffe970');
-        playSound('super');
-      }
       const stageNumber = getStageIndex(state.frame);
       if (stageNumber !== getStageIndex(state.frame - 1)) setStageIndex(stageNumber);
       if (stageNumber >= 9 && !ghostMode) setGhostMode(true);
+      if (state.frame % 600 === 0) {
+        const bars = Math.floor(state.tireCount / 5);
+        state.tireCount -= bars * 5;
+        state.goldBars += bars;
+        state.score += bars * 200;
+        setTireCount(state.tireCount);
+        setGoldBars(state.goldBars);
+        const american = Math.floor(state.frame / 600) % 2 === 1;
+        showNotice({
+          kind: 'truckstop',
+          title: american ? '🇺🇸 AMERICAN BIG-RIG TRUCK STOP' : '🇮🇳 INDIAN LORRY DHABA TRUCK STOP',
+          message: bars ? `${bars * 5} black tires → ${bars} gold bars!` : 'Collect at least five black tires to exchange for a gold bar.',
+          detail: bars ? '📦 Fantasy shipment: Playa Blanca near Cartagena, Colombia.' : 'Keep racing to collect more black truck tires.'
+        });
+        playSound('super');
+        speak(bars ? 'Tires into gold! Playa Blanca delivery! Go, go, go!' : 'Refuel! Grab five black tires to get one gold bar!');
+        return; // Freeze at the truck stop until the player resumes.
+      }
+      if (state.frame % 18 === 0) playMusicNote(Math.floor(state.frame / 18));
+      if (state.frame % 750 === 0) speak(DJ_SHOUTS[Math.floor(state.frame / 750) % DJ_SHOUTS.length]);
       if (state.frame >= 9 * STAGE_FRAMES && !secretRef.current) {
-        state.running = false;
-        setGameStatus('over');
+        finishRun();
         return;
       }
       if (state.frame >= 11 * STAGE_FRAMES) {
-        state.running = false;
-        setGameStatus('over');
+        finishRun();
         return;
       }
 
@@ -668,8 +794,8 @@ export default function App() {
             state.obstacles.splice(i, 1);
             playSound('hit');
           } else {
-            // IMMORTAL ARCADE: obstacles create a spectacular bounce, not a death.
-            state.lives = 999;
+            // Arcade health: a collision costs one life, followed by temporary grace.
+            state.lives = Math.max(0, state.lives - 1);
             state.player.vy = -12;
             state.player.jump = true;
             state.score += 10;
@@ -680,21 +806,9 @@ export default function App() {
             playSound('hit');
             state.obstacles.splice(i, 1);
 
-            if (false) {
-              state.running = false;
-              state.over = true;
-              addParticles(state.player.x + state.player.w / 2, state.player.y + state.player.h / 2, '#ff3333', 40, 10);
+            if (state.lives <= 0) {
               playSound('gameover');
-              const finalScore = Math.floor(state.score);
-              setScore(finalScore);
-              setTireCount(state.tireCount);
-              setLives(0);
-              setCombo(state.maxCombo);
-              setGameStatus('over');
-              if (finalScore > highRef.current) {
-                setHighScore(finalScore);
-                try { localStorage.setItem('sth_hi_v7', String(finalScore)); } catch (e) { /* ignore */ }
-              }
+              finishRun();
             } else {
               setLives(state.lives);
             }
@@ -1206,9 +1320,7 @@ export default function App() {
       ctx.strokeRect(W - 110, 8, 102, 30);
       ctx.font = '18px serif';
       ctx.textAlign = 'right';
-      for (let i = 0; i < state.lives; i++) {
-        ctx.fillText('❤️', W - 15 - i * 28, 30);
-      }
+      ctx.fillText('❤️ ×' + state.lives, W - 15, 30);
 
       // Combo
       if (state.combo > 1) {
@@ -1358,7 +1470,7 @@ export default function App() {
       }
 
       drawHUD();
-      if (state.frame > 0 && state.frame % 600 < 125) drawTruckStop();
+      if (noticeRef.current?.kind === 'truckstop') drawTruckStop();
       ctx.save();
       ctx.fillStyle = '#090b25dd'; ctx.fillRect(260, 52, 310, 27);
       ctx.fillStyle = '#ffeb78'; ctx.font = 'bold 15px monospace';
@@ -1381,16 +1493,32 @@ export default function App() {
 
     // Game loop
     let rafId = 0;
-    const loop = () => {
-      update();
+    let lastTime = 0;
+    let accumulator = 0;
+    const fixedStep = 1000 / 60;
+    const loop = (now: number) => {
+      const elapsed = lastTime ? Math.min(100, now - lastTime) : fixedStep;
+      lastTime = now;
+      if (statusRef.current === 'playing' && !noticeRef.current && state.running) {
+        accumulator += elapsed;
+        let steps = 0;
+        while (accumulator >= fixedStep && steps < 5 && !noticeRef.current && state.running) {
+          update();
+          accumulator -= fixedStep;
+          steps++;
+        }
+        if (steps === 5) accumulator = 0; // No unbounded catch-up after tab throttling.
+      } else {
+        accumulator = 0; // Never advance the game while a dialog or pause is active.
+      }
       draw();
       rafId = requestAnimationFrame(loop);
     };
 
-    engineRef.current = { start: startGame, jump: handleJump };
+    engineRef.current = { start: startGame, jump: handleJump, dismissNotice };
 
     initBg();
-    loop();
+    rafId = requestAnimationFrame(loop);
 
     return () => {
       cancelAnimationFrame(rafId);
@@ -1399,7 +1527,8 @@ export default function App() {
       canvas.removeEventListener('mousedown', handleClick);
       window.removeEventListener('keydown', handleKeyDown);
       engineRef.current = null;
-      if (audioCtx) audioCtx.close();
+      if (audioCtx) void audioCtx.close();
+      if ('speechSynthesis' in window) window.speechSynthesis.cancel();
     };
   }, []);
 
@@ -1407,7 +1536,15 @@ export default function App() {
     engineRef.current?.start();
   };
   const handleJumpButton = () => engineRef.current?.jump();
-  const togglePause = () => setGameStatus(current => current === 'playing' ? 'paused' : current === 'paused' ? 'playing' : current);
+  const dismissCutscene = () => engineRef.current?.dismissNotice();
+  const togglePause = () => {
+    if (noticeRef.current) return;
+    setGameStatus(current => {
+      const next = current === 'playing' ? 'paused' : current === 'paused' ? 'playing' : current;
+      statusRef.current = next;
+      return next;
+    });
+  };
 
   return (
     <div className="arcade-shell flex flex-col items-center justify-center p-3 sm:p-6">
@@ -1430,7 +1567,7 @@ export default function App() {
             width={800}
             height={450}
             className="w-full rounded-xl cursor-pointer block"
-            style={{ imageRendering: 'pixelated', touchAction: 'manipulation' }}
+            style={{ imageRendering: 'auto', touchAction: 'manipulation' }}
           />
 
           {/* Menu Overlay */}
@@ -1451,13 +1588,13 @@ export default function App() {
                   <p className="text-gray-300 text-sm font-mono">🛡🧲⏱ Power-ups: Shield, Magnet, Slow-mo</p>
                   <p className="text-gray-300 text-sm font-mono">🍷 White wine = WINGS — jump higher & longer</p>
                   <p className="text-gray-300 text-sm font-mono">🍇 Black wine = GORILLA MODE — smash everything</p>
-                  <p className="text-gray-300 text-sm font-mono">❤️ 3 lives - combo for bonus points!</p>
+                  <p className="text-gray-300 text-sm font-mono">❤️ 10 lives - combo for bonus points!</p>
                 </div>
                 <button
                   onClick={handleStart}
                   className="arcade-button px-8 py-2 sm:py-3 bg-lime-400 hover:bg-lime-300 text-black font-black font-mono rounded-xl text-lg"
                 >
-                  ▶ START GAME
+                  📞 ANSWER TRUCKER'S CALL
                 </button>
                 <p className="text-gray-300 text-xs mt-2 font-mono">SPACE / ↑ / TAP = jump • P / ESC = pause</p>
               </div>
@@ -1468,7 +1605,7 @@ export default function App() {
           {gameStatus === 'over' && (
             <div className="arcade-overlay absolute inset-0 flex flex-col items-center justify-center bg-black/85 rounded-xl py-3 px-4">
               <div className="text-center">
-                <h2 className="text-2xl sm:text-4xl font-black text-pink-400 font-mono mb-2">GAME OVER</h2>
+                <h2 className="text-2xl sm:text-4xl font-black text-pink-400 font-mono mb-2">{lives > 0 ? "🏁 TOUR COMPLETE!" : "💥 GAME OVER"}</h2>
                 <div className="bg-gray-800/80 rounded-xl p-3 sm:p-4 mb-3 sm:mb-5 border border-violet-400/60">
                   <p className="text-yellow-300 text-xl font-mono">Score: {score}</p>
                   <p className="text-gray-300 font-mono mt-1">Tires: {tireCount}</p>
@@ -1490,10 +1627,44 @@ export default function App() {
           )}
         </div>
 
-        {/* Dedicated touch/keyboard-friendly action, separate from the canvas */}
-        <div className="mt-4 flex justify-center"><button type="button" onClick={handleJumpButton} disabled={gameStatus !== 'playing'} className="arcade-button arcade-jump rounded-2xl px-10 py-3" aria-label="Jump over obstacles">⬆ JUMP!</button></div>
+        {notice && (
+          <div className="call-backdrop" role="dialog" aria-modal="true" aria-label={notice.title}>
+            <div className="call-scene">
+              <div className="call-scene-header">
+                <span className="call-pill">🛜 {notice.kind === 'call' ? 'INCOMING VIDEO CALL' : 'CHECKPOINT · ACTION FROZEN'}</span>
+                <span className="call-pill">❤️ {lives} LIVES · 🪙 {goldBars} GOLD</span>
+              </div>
+              {notice.kind === 'call' ? (
+                <div className="call-layout">
+                  <div className="call-hero">
+                    <img src={GORILLA_URL} alt="Blackhujus the gorilla hero" />
+                    <strong>🦍 BLACKHUJUS</strong>
+                    <span>WORLD TOUR HERO</span>
+                  </div>
+                  <div className="call-phone">
+                    <p className="call-connection">📞 EUROPEAN TRUCK PARKING · CONNECTED</p>
+                    <img src={TRUCKER_PIXEL_URL} alt="Pixel-art trucker calling from a European container port" />
+                    <span>🚛 POLISH TRUCKER · VIDEO LINK</span>
+                  </div>
+                </div>
+              ) : (
+                <div className="truckstop-header" aria-hidden="true">🚛 🛞 🪙 📦</div>
+              )}
+              <h2>{notice.title}</h2>
+              <p className="call-message">{notice.kind === 'call' ? '“' : ''}{notice.message}{notice.kind === 'call' ? '”' : ''}</p>
+              {notice.detail && <p className="call-detail">{notice.detail}</p>}
+              <button type="button" autoFocus className="arcade-button call-resume" onClick={dismissCutscene}>
+                {notice.kind === 'call' ? '📞 END CALL · START THE RUN' : '▶ CONTINUE THE WORLD TOUR'}
+              </button>
+              <p className="call-hint">The game timer, vehicles and obstacles are frozen. SPACE / ENTER to continue.</p>
+            </div>
+          </div>
+        )}
 
-        <div className="mt-3 text-center text-yellow-200 font-mono text-xs">🦍 IMMORTAL HERO · 🗺️ 🍷 💵 💌 💿 SOUVENIRS {souvenirs} · {ghostMode ? '👻 GHOST WORLD' : '⚡ WORLD TOUR'}</div>
+        {/* Dedicated touch/keyboard-friendly action, separate from the canvas */}
+        <div className="mt-4 flex justify-center"><button type="button" onClick={handleJumpButton} disabled={gameStatus !== 'playing' || !!notice} className="arcade-button arcade-jump rounded-2xl px-10 py-3" aria-label="Jump over obstacles">⬆ JUMP!</button></div>
+
+        <div className="mt-3 text-center text-yellow-200 font-mono text-xs">🦍 WORLD TOUR · ❤️ {lives} LIVES · 🪙 {goldBars} GOLD · 🗺️ 🍷 💵 💌 💿 SOUVENIRS {souvenirs} · {ghostMode ? '👻 GHOST WORLD' : '⚡ WORLD TOUR'}</div>
         <div className="mt-3 text-center text-violet-200 font-mono text-xs sm:text-sm">🌍 STAGE {stageIndex + 1} / 11 · {STAGES[stageIndex].city} · {STAGES[stageIndex].place} · 5 seconds per stage</div>
         {gameStatus === 'over' && !secretUnlocked && stageIndex >= 8 && <div className="mt-3 text-center"><button className="arcade-button rounded-xl bg-fuchsia-500 text-white px-5 py-3 font-bold" onClick={() => { setSecretUnlocked(true); secretRef.current = true; handleStart(); }}>👻 ENTER GHOST WORLDS: BOSTON + TEXAS–MEXICO BORDER</button></div>}
         {/* Controls */}
@@ -1510,8 +1681,13 @@ export default function App() {
             {soundEnabled ? '🔊 Sound ON' : '🔇 Sound OFF'}
           </button>
           <button
+            onClick={() => setVoiceEnabled(value => !value)}
+            aria-pressed={voiceEnabled}
+            className="arcade-button px-4 py-3 bg-fuchsia-700 text-white rounded-xl font-mono text-sm font-bold hover:bg-fuchsia-600"
+          >{voiceEnabled ? '🎙️ DJ Voice ON' : '🎙️ DJ Voice OFF'}</button>
+          <button
             onClick={togglePause}
-            disabled={gameStatus === 'menu' || gameStatus === 'over'}
+            disabled={gameStatus === 'menu' || gameStatus === 'over' || !!notice}
             className="arcade-button px-4 py-3 bg-yellow-500 text-black rounded-xl font-mono text-sm font-bold hover:bg-yellow-400"
           >
             {gameStatus === 'paused' ? '▶ Resume' : '⏸ Pause'}
@@ -1524,7 +1700,7 @@ export default function App() {
           </button>
         </div>
 
-        <div aria-live="polite" className="mt-3 text-center text-sm text-lime-200 font-mono">{gameStatus === 'playing' ? '⚡ RUNNING — collect tires and keep your combo alive!' : gameStatus === 'paused' ? '⏸ PAUSED — resume when ready.' : gameStatus === 'over' ? '🏁 RUN COMPLETE — chase your next record!' : '✨ READY? Your neon adventure starts here.'}</div>
+        <div aria-live="polite" className="mt-3 text-center text-sm text-lime-200 font-mono">{notice ? '📞 CUTSCENE FROZEN — CONTINUE WHEN READY' : gameStatus === 'playing' ? '⚡ RUNNING — collect tires and keep your combo alive!' : gameStatus === 'paused' ? '⏸ PAUSED — resume when ready.' : gameStatus === 'over' ? '🏁 RUN COMPLETE — chase your next record!' : '✨ READY? Your neon adventure starts here.'}</div>
 
         {/* Instructions */}
         <div className="arcade-tip mt-4 text-center">

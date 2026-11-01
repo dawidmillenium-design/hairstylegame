@@ -21,7 +21,7 @@ const DJ_SHOUTS = [
 // ============================================
 // BLACKHUJUS the GREEN HAIR STYLE v8.0
 // - Real pixel-art hero sprite (Blackhujus) + gorilla black-wine transformation
-// - White wine = wings (higher, longer jumps); black wine = GORILLA MODE
+// - White wine = golden bar; black wine = GORILLA MODE
 // - Merhujus & Mr Ping (YAYAYA) cameos in the background
 // - Engine mounts ONCE: pausing / toggling sound no longer resets the run
 // ============================================
@@ -780,10 +780,10 @@ export default function App() {
             case 'shield': state.shieldActive = true; state.shieldTimer = 360; break;
             case 'magnet': state.magnetActive = true; state.magnetTimer = 480; break;
             case 'slow': state.slowActive = true; state.slowTimer = 300; break;
-            case 'wineW': state.wingActive = true; state.wingTimer = 600; break;
+            case 'wineW': state.goldBars += 1; state.score += 200; setGoldBars(state.goldBars); break;
             case 'wineB': state.gorillaActive = true; state.gorillaTimer = 480; break;
           }
-          const label = p.type === 'wineW' ? 'WHITE WINE! WINGS!' : p.type === 'wineB' ? 'BLACK WINE! GORILLA!' : p.type.toUpperCase() + '!';
+          const label = p.type === 'wineW' ? 'WHITE WINE → GOLD BAR!' : p.type === 'wineB' ? 'BLACK WINE! GORILLA!' : p.type.toUpperCase() + '!';
           addPopup(p.x, p.y - 20, label, p.type === 'wineB' ? '#c678dd' : '#00ffaa');
           addParticles(p.x, p.y, '#00ffaa', 12);
           playSound('super');
@@ -1644,7 +1644,7 @@ export default function App() {
                   <p className="text-gray-300 text-sm font-mono">🏃 Collect tires, avoid obstacles</p>
                   <p className="text-gray-300 text-sm font-mono">⭐ Grab golden tires for invincibility</p>
                   <p className="text-gray-300 text-sm font-mono">🛡🧲⏱ Power-ups: Shield, Magnet, Slow-mo</p>
-                  <p className="text-gray-300 text-sm font-mono">🍷 White wine = WINGS — jump higher & longer</p>
+                  <p className="text-gray-300 text-sm font-mono">🍷 White wine = GOLD BAR — trade your way up</p>
                   <p className="text-gray-300 text-sm font-mono">🍇 Black wine = GORILLA MODE — smash everything</p>
                   <p className="text-gray-300 text-sm font-mono">❤️ 10 lives - combo for bonus points!</p>
                 </div>
@@ -1712,6 +1712,12 @@ export default function App() {
               <h2>{notice.title}</h2>
               <p className="call-message">{notice.kind === 'call' ? '“' : ''}{notice.message}{notice.kind === 'call' ? '”' : ''}</p>
               {notice.detail && <p className="call-detail">{notice.detail}</p>}
+              {notice.kind === 'truckstop' && (
+                <button type="button" className="arcade-button call-resume" style={{ background: 'linear-gradient(110deg,#af40ff,#ff58b3)', color: '#fff' }}
+                  onClick={() => { dismissCutscene(); openRpgHub(); }}>
+                  🌍 TALK TO THE CREW · OPEN RPG COMEDY
+                </button>
+              )}
               <button type="button" autoFocus className="arcade-button call-resume" onClick={dismissCutscene}>
                 {notice.kind === 'call' ? '📞 END CALL · START THE RUN' : '▶ CONTINUE THE WORLD TOUR'}
               </button>
@@ -1768,7 +1774,7 @@ export default function App() {
             SPACE / ↑ / TAP / JUMP button = jump • P / ESC = pause • avoid cones, potholes & barriers • golden SUPER TIRE = invincible
           </p>
           <p className="text-gray-600 text-xs font-mono mt-1">
-            Collect tires in sequence for combo multiplier • 🛡 Shield • 🧲 Magnet • ⏱ Slow-mo • 🍷 White wine = wings • 🍇 Black wine = gorilla
+            Collect tires in sequence for combo multiplier • 🛡 Shield • 🧲 Magnet • ⏱ Slow-mo • 🍷 White wine = gold bar • 🍇 Black wine = gorilla
           </p>
         </div>
       </main>

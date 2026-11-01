@@ -567,6 +567,24 @@ export default function App() {
     canvas.addEventListener('mousedown', handleClick);
     window.addEventListener('keydown', handleKeyDown);
 
+    const finishRun = () => {
+      if (!state.running) return;
+      state.running = false;
+      state.over = true;
+      const finalScore = Math.floor(state.score);
+      setScore(finalScore);
+      setTireCount(state.tireCount);
+      setLives(state.lives);
+      setCombo(state.maxCombo);
+      setGameStatus('over');
+      statusRef.current = 'over';
+      if (finalScore > highRef.current) {
+        highRef.current = finalScore;
+        setHighScore(finalScore);
+        try { localStorage.setItem('sth_hi_v7', String(finalScore)); } catch { /* storage optional */ }
+      }
+    };
+
     // ---- UPDATE ----
     const update = () => {
       if (!state.running || statusRef.current !== 'playing' || noticeRef.current) return;
@@ -595,13 +613,11 @@ export default function App() {
       if (stageNumber !== getStageIndex(state.frame - 1)) setStageIndex(stageNumber);
       if (stageNumber >= 9 && !ghostMode) setGhostMode(true);
       if (state.frame >= 9 * STAGE_FRAMES && !secretRef.current) {
-        state.running = false;
-        setGameStatus('over');
+        finishRun();
         return;
       }
       if (state.frame >= 11 * STAGE_FRAMES) {
-        state.running = false;
-        setGameStatus('over');
+        finishRun();
         return;
       }
 
@@ -787,20 +803,8 @@ export default function App() {
             state.obstacles.splice(i, 1);
 
             if (state.lives <= 0) {
-              state.running = false;
-              state.over = true;
-              addParticles(state.player.x + state.player.w / 2, state.player.y + state.player.h / 2, '#ff3333', 40, 10);
               playSound('gameover');
-              const finalScore = Math.floor(state.score);
-              setScore(finalScore);
-              setTireCount(state.tireCount);
-              setLives(0);
-              setCombo(state.maxCombo);
-              setGameStatus('over');
-              if (finalScore > highRef.current) {
-                setHighScore(finalScore);
-                try { localStorage.setItem('sth_hi_v7', String(finalScore)); } catch (e) { /* ignore */ }
-              }
+              finishRun();
             } else {
               setLives(state.lives);
             }
@@ -1462,7 +1466,7 @@ export default function App() {
       }
 
       drawHUD();
-      if (state.frame > 0 && state.frame % 600 < 125) drawTruckStop();
+      if (noticeRef.current?.kind === 'truckstop') drawTruckStop();
       ctx.save();
       ctx.fillStyle = '#090b25dd'; ctx.fillRect(260, 52, 310, 27);
       ctx.fillStyle = '#ffeb78'; ctx.font = 'bold 15px monospace';
@@ -1491,10 +1495,10 @@ export default function App() {
     const loop = (now: number) => {
       const elapsed = lastTime ? Math.min(100, now - lastTime) : fixedStep;
       lastTime = now;
-      if (statusRef.current === 'playing' && !noticeRef.current) {
+      if (statusRef.current === 'playing' && !noticeRef.current && state.running) {
         accumulator += elapsed;
         let steps = 0;
-        while (accumulator >= fixedStep && steps < 5 && !noticeRef.current) {
+        while (accumulator >= fixedStep && steps < 5 && !noticeRef.current && state.running) {
           update();
           accumulator -= fixedStep;
           steps++;
@@ -1510,7 +1514,7 @@ export default function App() {
     engineRef.current = { start: startGame, jump: handleJump, dismissNotice };
 
     initBg();
-    loop();
+    rafId = requestAnimationFrame(loop);
 
     return () => {
       cancelAnimationFrame(rafId);
@@ -1597,7 +1601,7 @@ export default function App() {
           {gameStatus === 'over' && (
             <div className="arcade-overlay absolute inset-0 flex flex-col items-center justify-center bg-black/85 rounded-xl py-3 px-4">
               <div className="text-center">
-                <h2 className="text-2xl sm:text-4xl font-black text-pink-400 font-mono mb-2">GAME OVER</h2>
+                <h2 className="text-2xl sm:text-4xl font-black text-pink-400 font-mono mb-2">{lives > 0 ? "🏁 TOUR COMPLETE!" : "💥 GAME OVER"}</h2>
                 <div className="bg-gray-800/80 rounded-xl p-3 sm:p-4 mb-3 sm:mb-5 border border-violet-400/60">
                   <p className="text-yellow-300 text-xl font-mono">Score: {score}</p>
                   <p className="text-gray-300 font-mono mt-1">Tires: {tireCount}</p>

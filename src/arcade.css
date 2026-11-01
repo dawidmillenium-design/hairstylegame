@@ -1,0 +1,18 @@
+/* BLACKHUJUS — Neon Arcade UX enhancement */
+:root{color-scheme:dark}*{box-sizing:border-box}
+body{margin:0;background:#080a16}
+.arcade-shell{position:relative;min-height:100vh;overflow:hidden;background:radial-gradient(ellipse at 12% 10%,#27205d 0,transparent 45%),radial-gradient(ellipse at 90% 90%,#063f38 0,transparent 46%),#080a16}
+.arcade-shell:before{content:"";position:fixed;inset:0;pointer-events:none;opacity:.19;background-image:linear-gradient(#ffffff08 1px,transparent 1px),linear-gradient(90deg,#ffffff08 1px,transparent 1px);background-size:32px 32px}
+.arcade-title{font-family:monospace;text-shadow:0 0 13px #65ff9c,0 0 32px #0bcc83;letter-spacing:.055em}
+.arcade-panel{background:linear-gradient(140deg,#11172de8,#101028ec);box-shadow:0 0 0 1px #c084fc45,0 18px 55px #0009,0 0 38px #22ff9960}
+.arcade-button{border:1px solid #ffffff55;box-shadow:inset 0 1px #ffffff44,0 5px 0 #0008;transition:transform .15s ease,box-shadow .15s ease,filter .15s ease;touch-action:manipulation}
+.arcade-button:hover:not(:disabled){transform:translateY(-3px);filter:brightness(1.12);box-shadow:inset 0 1px #ffffff66,0 8px 18px #0009}
+.arcade-button:active:not(:disabled){transform:translateY(2px);box-shadow:inset 0 1px #ffffff55,0 2px 0 #0008}
+.arcade-button:focus-visible,.arcade-shell button:focus-visible{outline:3px solid #fff;outline-offset:3px}
+.arcade-button:disabled{opacity:.45;cursor:not-allowed}
+.arcade-tag{background:#171a35;border:1px solid #74f4ab55;border-radius:999px;padding:.35rem .7rem;color:#d1ffe8;font-size:.75rem;font-family:monospace}
+.arcade-overlay{backdrop-filter:blur(5px);overflow-y:auto;scrollbar-width:thin}
+.arcade-jump{min-height:60px;min-width:180px;background:linear-gradient(135deg,#c1ff43,#49f5c3);color:#091323;font-size:1.2rem;font-weight:900;letter-spacing:.09em}
+.arcade-tip{border:1px solid #ffffff20;background:#ffffff0b;border-radius:1rem;padding:.7rem}
+@media(max-width:520px){.arcade-overlay h2{font-size:1.4rem}.arcade-menu-text{font-size:.73rem!important}.arcade-jump{width:100%}.arcade-controls{gap:.5rem}.arcade-controls button{flex:1 1 42%}}
+@media(prefers-reduced-motion:reduce){.arcade-shell *, .arcade-shell *:before,.arcade-shell *:after{animation:none!important;transition:none!important}}

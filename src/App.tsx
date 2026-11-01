@@ -593,9 +593,28 @@ export default function App() {
         e.preventDefault();
         if (!e.repeat) handleDash();
       }
+      if (e.code === 'KeyE' && !noticeRef.current) {
+        e.preventDefault();
+        if (!e.repeat) tradeTires();
+      }
+      if ((e.code === 'KeyQ' || e.code === 'KeyM' || e.code === 'KeyI') && !noticeRef.current) {
+        e.preventDefault();
+        rpgWasPlaying.current = statusRef.current === 'playing';
+        if (rpgWasPlaying.current) {
+          statusRef.current = 'paused';
+          setGameStatus('paused');
+        }
+        rpgOpenRef.current = true;
+        setRpgOpen(true);
+      }
       if (e.code === 'KeyP' || e.code === 'Escape') {
-        if (statusRef.current === 'playing') setGameStatus('paused');
-        else if (statusRef.current === 'paused') setGameStatus('playing');
+        if (statusRef.current === 'playing') {
+          statusRef.current = 'paused';
+          setGameStatus('paused');
+        } else if (statusRef.current === 'paused') {
+          statusRef.current = 'playing';
+          setGameStatus('playing');
+        }
       }
     };
 
@@ -1798,7 +1817,7 @@ export default function App() {
         {/* Instructions */}
         <div className="arcade-tip mt-4 text-center">
           <p className="text-gray-500 text-xs font-mono">
-            SPACE / ↑ / TAP / JUMP = double jump • SHIFT / D = turbo dash • P / ESC = pause • avoid cones, potholes & barriers • golden SUPER TIRE = invincible
+            SPACE / ↑ / TAP / JUMP = double jump • SHIFT / D = turbo dash • P / ESC = pause • E = trade • Q/M/I = RPG • avoid cones, potholes & barriers • golden SUPER TIRE = invincible
           </p>
           <p className="text-gray-600 text-xs font-mono mt-1">
             Collect tires in sequence for combo multiplier • 🛡 Shield • 🧲 Magnet • ⏱ Slow-mo • 🍷 White wine = gold bar • 🍇 Black wine = gorilla

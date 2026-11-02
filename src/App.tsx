@@ -243,12 +243,12 @@ export default function App() {
     const GRAVITY = 0.85;
     const JUMP_FORCE = -17;
     const MAX_SPEED = 14;
-    const HERO_H = 132;
+    const HERO_H = 66; // Half-size hero; physics and collision bounds follow the visible sprite.
 
     // Real hero sprite, with hand-drawn pixel-art fallback while it loads
     const heroImg = new Image();
     let heroReady = false;
-    let heroW = 56; // updated from the real aspect ratio once loaded
+    let heroW = 28; // half-size placeholder until the source image loads
     heroImg.onload = () => {
       heroReady = true;
       heroW = Math.round(HERO_H * (heroImg.naturalWidth / heroImg.naturalHeight));
@@ -1272,19 +1272,21 @@ export default function App() {
       }
     };
 
+    let renderPlayerY: number | null = null;
+    let renderGroundOff: number | null = null;
     const drawHero = () => {
       const bob = state.player.jump ? 0 : Math.sin(state.player.ang) * 3;
       const pw = state.player.w;
       const ph = state.player.h;
       const px = state.player.x;
-      const py = state.player.y + bob;
+      const py = (renderPlayerY ?? state.player.y) + bob;
       if (state.dashTimer > 0) {
         ctx.save();
-        ctx.shadowColor = '#6dfcfa'; ctx.shadowBlur = 18;
+        ctx.shadowColor = '#6dfcfa'; ctx.shadowBlur = 11;
         for (let i=0;i<5;i++){
-          const yy = py + 14 + i*26;
+          const yy = py + 7 + i*13;
           ctx.fillStyle = i%2 ? '#c9fff8bb' : '#f76bf7cc';
-          ctx.fillRect(px-34-(i%3)*17, yy, 33+(i%2)*11, 3);
+          ctx.fillRect(px-34-(i%3)*17, yy, 22+(i%2)*7, 2);
         }
         ctx.restore();
       }
@@ -1342,12 +1344,12 @@ export default function App() {
         const gh = ph * 1.3;
         const gw = gh * (gorillaImg.naturalWidth / gorillaImg.naturalHeight);
         ctx.save();
-        ctx.imageSmoothingEnabled = true;
+        ctx.imageSmoothingEnabled = false;
         ctx.drawImage(gorillaImg, px + pw / 2 - gw / 2, py + ph - gh, gw, gh);
         ctx.restore();
       } else if (heroReady) {
         ctx.save();
-        ctx.imageSmoothingEnabled = true;
+        ctx.imageSmoothingEnabled = false;
         ctx.drawImage(heroImg, px, py, pw, ph);
         ctx.restore();
       } else {
@@ -1363,10 +1365,10 @@ export default function App() {
         ctx.strokeStyle = 'rgba(255,255,255,0.35)';
         ctx.lineWidth = 1.5;
         for (let i = 0; i < 3; i++) {
-          const ly = py + 25 + i * 38 + Math.sin(state.player.ang + i) * 8;
+          const ly = py + 12 + i * 19 + Math.sin(state.player.ang + i) * 4;
           ctx.beginPath();
           ctx.moveTo(px - 5, ly);
-          ctx.lineTo(px - 30 - Math.random() * 15, ly);
+          ctx.lineTo(px - 24 - 6 * (i + 1), ly);
           ctx.stroke();
         }
       }
@@ -1565,6 +1567,9 @@ export default function App() {
     let lastTime = 0;
     let accumulator = 0;
     const fixedStep = 1000 / 60;
+    // Fixed-step gameplay remains deterministic; visual positions are interpolated per display frame.
+    let previousPlayerY = state.player.y;
+    let previousGroundOff = state.groundOff;
     const loop = (now: number) => {
       const elapsed = lastTime ? Math.min(100, now - lastTime) : fixedStep;
       lastTime = now;
@@ -1572,6 +1577,8 @@ export default function App() {
         accumulator += elapsed;
         let steps = 0;
         while (accumulator >= fixedStep && steps < 5 && !noticeRef.current && state.running) {
+          previousPlayerY = state.player.y;
+          previousGroundOff = state.groundOff;
           update();
           accumulator -= fixedStep;
           steps++;
@@ -1580,6 +1587,9 @@ export default function App() {
       } else {
         accumulator = 0; // Never advance the game while a dialog or pause is active.
       }
+      const interpolation = Math.min(1, accumulator / fixedStep);
+      renderPlayerY = previousPlayerY + (state.player.y - previousPlayerY) * interpolation;
+      renderGroundOff = previousGroundOff + (state.groundOff - previousGroundOff) * interpolation;
       draw();
       rafId = requestAnimationFrame(loop);
     };
